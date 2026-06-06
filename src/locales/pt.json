@@ -1,0 +1,229 @@
+{
+  "langLabel": "Idioma",
+  "plaintextMsg": "Olá Mundo, nos vemos às 17h. Senha do wifi: 12345",
+
+  "header": {
+    "subtitle": "Simulador de Fluxo",
+    "statLatency": "Latência",
+    "statSecurity": "Segurança",
+    "statPackets": "Pacotes",
+    "manual": "Manual de uso",
+    "about": "Sobre",
+    "exportPng": "Exportar como imagem (PNG)",
+    "scatter": "Embaralhar",
+    "scatterTitle": "Posiciona os 13 nós embaralhados para que o grupo os organize (modo oficina)",
+    "autoAssemble": "Montagem Automática",
+    "autoAssembleTitle": "Gera o fluxo completo automaticamente",
+    "reset": "Reiniciar",
+    "send": "Enviar",
+    "sending": "Enviando..."
+  },
+
+  "inventory": {
+    "title": "Inventário",
+    "subtitle": "Nós & Ferramentas",
+    "hide": "Ocultar inventário",
+    "show": "Mostrar inventário",
+    "howToTitle": "Como conectar",
+    "howTo1": "Arraste um nó para a tela. Para criar um cabo, arraste a partir do ",
+    "howToBlue": "ponto azul",
+    "howTo2": " de um nó até outro. Clique em um cabo para removê-lo."
+  },
+
+  "nodes": {
+    "person": "Pessoa 1",
+    "laptop": "Notebook",
+    "router": "Modem/WiFi",
+    "hub": "Concentrador",
+    "cabling": "Cabeamento",
+    "isp": "Provedor",
+    "cloud-a": "Gmail",
+    "cloud-b": "Hotmail",
+    "cell": "Torre Celular",
+    "smartphone": "Celular",
+    "person2": "Pessoa 2",
+    "vpn": "VPN",
+    "hacker": "Atacante MitM"
+  },
+
+  "nodeDesc": {
+    "person": "Usuário que inicia a comunicação.",
+    "laptop": "Dispositivo local de processamento.",
+    "router": "Ponto de acesso local à rede.",
+    "hub": "Agregador de conexões locais.",
+    "cabling": "Infraestrutura física de transmissão.",
+    "isp": "Provedor de Internet. Roteia os dados.",
+    "cloud-a": "Servidor de aplicações na nuvem.",
+    "cloud-b": "Servidor de e-mail secundário.",
+    "cell": "Estação base sem fio.",
+    "smartphone": "Dispositivo receptor móvel.",
+    "person2": "Destinatário final da mensagem.",
+    "vpn": "Computador de confiança em outra parte do mundo: recebe seu tráfego cifrado e o reenvia com o próprio IP.",
+    "hacker": "Entidade maliciosa interceptadora."
+  },
+
+  "modeMeta": {
+    "basico": "Básica",
+    "https": "HTTPS / TLS",
+    "e2ee": "Ponta a Ponta",
+    "vpn": "Túnel VPN"
+  },
+
+  "modes": {
+    "basico": "Básico",
+    "https": "HTTPS",
+    "e2ee": "E2EE",
+    "vpn": "VPN"
+  },
+
+  "canvas": {
+    "vpnTunnel": "Túnel VPN cifrado",
+    "deleteCable": "Clique para remover este cabo",
+    "connectPort": "Arraste para conectar",
+    "legendHttps": "HTTPS: cifrado por trechos",
+    "legendE2ee": "E2EE: ponta a ponta",
+    "legendE2eeNote1": "Uma única chave: apenas origem e destino. As nuvens ",
+    "legendE2eeNoteBold": "não conseguem ler",
+    "legendE2eeNote2": " o conteúdo.",
+    "zoomIn": "Aproximar",
+    "zoomOut": "Afastar",
+    "zoomReset": "Redefinir",
+    "empty1": "Arraste nós do inventário ou clique em ",
+    "emptyBold": "Montagem Automática",
+    "empty2": "."
+  },
+
+  "log": {
+    "title": "Log",
+    "badge": "Pro",
+    "waiting": "Aguardando simulação...",
+    "hide": "Ocultar log",
+    "show": "Mostrar log"
+  },
+
+  "packet": {
+    "inspect": "INSPECIONAR"
+  },
+
+  "keyModal": {
+    "visible": "Conteúdo visível (decifrado)",
+    "encrypted": "Na rede viaja cifrado (ilegível)",
+    "reencrypts": "Cifra novamente para reenviar",
+    "continue": "Continuar"
+  },
+
+  "infoModal": {
+    "close": "Fechar"
+  },
+
+  "manual": {
+    "title": "Manual de uso",
+    "steps": [
+      {
+        "title": "Monte o fluxo",
+        "text": "Arraste peças do painel esquerdo para a tela, ou clique em Montagem Automática para gerar o fluxo completo de uma vez."
+      },
+      {
+        "title": "Conecte os nós",
+        "text": "Arraste a partir do ponto de um nó até outro para criar o cabo que os une."
+      },
+      {
+        "title": "Adicione um atacante",
+        "text": "Solte a peça Atacante MitM dentro do caminho para ver o que ele consegue ler quando a mensagem passa por ali."
+      },
+      {
+        "title": "Escolha um modo",
+        "text": "Embaixo você alterna entre Básico, HTTPS, E2EE e VPN. Cada modo muda como a mensagem viaja e é cifrada."
+      },
+      {
+        "title": "Simule",
+        "text": "Clique em Enviar e acompanhe a narração passo a passo. Em cada pausa use Continuar (ou as teclas Enter / Espaço)."
+      },
+      {
+        "title": "Modo oficina",
+        "text": "Embaralhar distribui as peças sem conexões para que o grupo monte o fluxo por conta própria."
+      },
+      {
+        "title": "Exporte a imagem",
+        "text": "O botão de imagem (PNG) baixa uma captura da tela como está."
+      }
+    ]
+  },
+
+  "about": {
+    "title": "Sobre",
+    "p1a": "Simulador educativo do fluxo da internet, feito para ",
+    "p1bold": "oficinas online",
+    "p1b": " de segurança: mostra como uma mensagem viaja e o que cada modo de cifragem protege.",
+    "p2a": "É um projeto de ",
+    "p2bold": "código aberto",
+    "p2b": ". Você pode ver o código, relatar problemas ou contribuir no GitHub.",
+    "github": "Ver no GitHub",
+    "feedback": "Comentários ou sugestões? Escreva para"
+  },
+
+  "interception": {
+    "title": "Atacante MitM",
+    "subtitle": "Interceptando o pacote em trânsito…",
+    "canRead": "O atacante consegue LER sua mensagem!",
+    "canReadNote1": "A mensagem viaja em ",
+    "canReadBold": "texto puro",
+    "canReadNote2": ". Qualquer um no caminho (um atacante, o WiFi público ou o provedor) pode lê-la e até modificá-la. Experimente um modo cifrado (HTTPS / E2EE / VPN) e envie novamente.",
+    "cantRead": "O atacante não consegue ler nada",
+    "cantReadNote1": "O conteúdo está ",
+    "cantReadBold": "cifrado",
+    "cantReadNote2": ". O atacante só vê bytes ilegíveis: não pode ler nem alterar a mensagem sem a chave. É isso que o HTTPS, a cifragem ponta a ponta e a VPN protegem.",
+    "continue": "Continuar"
+  },
+
+  "dpi": {
+    "title": "Deep Packet Inspector",
+    "metadata": "Metadados",
+    "protocol": "Protocolo",
+    "cipher": "Cifragem",
+    "none": "NENHUM",
+    "payload": "Payload (Conteúdo)",
+    "analyst": "Nota do Analista:",
+    "noteEnc": "O conteúdo viaja ilegível: um atacante no caminho só vê bytes cifrados.",
+    "notePlain": "Modo Básico: qualquer um na rota (provedor, atacante) pode ler a mensagem em texto puro."
+  },
+
+  "lowRes": {
+    "title": "Tela muito pequena",
+    "body1": " é uma ferramenta projetada para ",
+    "bodyBold": "navegador de desktop",
+    "body2": ". Para funcionar corretamente é necessária uma resolução mínima de ",
+    "res": "1024 × 600",
+    "hint": "Amplie a janela ou use uma tela maior."
+  },
+
+  "sim": {
+    "errorIncomplete": "ERRO: fluxo incompleto. Conecte {start} até um destino válido.",
+    "starting": "Iniciando simulação - Modo {mode}",
+    "e2eeIntro": "Cifragem ponta a ponta: apenas a origem e o destino têm a chave.",
+    "vpnIntro": "Túnel VPN ativo: o tráfego viaja encapsulado e cifrado.",
+    "received": "Pacote recebido em {label} - Processando...",
+    "nextNode": "o próximo nó",
+    "destFallback": "o destino",
+    "httpsStartTitle": "Aqui começa a chave segura",
+    "httpsStartText": "{label} cifra a mensagem. A partir daqui viaja cifrada até {next}, ilegível na rede.",
+    "httpsCloudTitle": "Aqui {label} abre a chave",
+    "httpsCloudText": "Tem a chave: decifra o conteúdo e pode lê-lo. Depois cifra novamente com uma nova chave até {next}.",
+    "httpsCloudLog": "{label} decifra o conteúdo e cifra novamente (pode lê-lo).",
+    "httpsEndTitle": "Aqui termina a chave segura",
+    "httpsEndText": "{label} decifra o conteúdo final com sua chave e o lê.",
+    "httpsEndLog": "{label} recebe e decifra o conteúdo final.",
+    "secureLegLog": "Chave segura: {a} -> {b}",
+    "e2eeStartTitle": "Cifragem ponta a ponta",
+    "e2eeStartText": "{label} cifra a mensagem com uma chave que só compartilha com {dest}. Viaja cifrada por todo o caminho.",
+    "e2eeEndTitle": "Só o destino consegue ler",
+    "e2eeEndText": "{label} decifra o conteúdo com sua chave compartilhada. Ninguém no meio conseguiu lê-lo.",
+    "e2eeEndLog": "{label} decifra o conteúdo final (destino).",
+    "e2eeCloudTitle": "{label} não consegue lê-lo",
+    "e2eeCloudText": "Apenas reenvia dados cifrados: não tem a chave para abri-los. Ao contrário do HTTPS, aqui o servidor não vê o conteúdo.",
+    "e2eeCloudLog": "{label} reenvia o conteúdo cifrado (não consegue lê-lo).",
+    "mitmEncrypted": "Atacante MitM intercepta o tráfego, mas está cifrado, ilegível.",
+    "mitmPlain": "Atacante MitM interceptou a mensagem em TEXTO PURO.",
+    "delivered": "Entrega bem-sucedida. Conexão encerrada."
+  }
+}

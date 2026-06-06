@@ -25,6 +25,10 @@ del camino. Es un proyecto de código abierto.
   inspector DPI, interceptación MitM y log técnico.
 - Exportar el lienzo como imagen PNG, manual de uso y sección "Acerca de"
   integrados.
+- Multiidioma (español y portugués por ahora), con un selector en la barra
+  superior. Cada idioma es un archivo JSON en `src/locales/` (por ejemplo
+  `es.json`, `pt.json`), pensado para sumar fácilmente nuevas traducciones en el
+  futuro, incluidas lenguas indígenas.
 
 ## Stack
 
@@ -66,7 +70,20 @@ abren el manual de uso y la sección "Acerca de".
 ## Estructura
 
 - `src/App.tsx`: toda la lógica de estado y los componentes principales.
+- `src/i18n.tsx`: carga de idiomas, interpolación y contexto de traducción.
+- `src/locales/*.json`: las cadenas de cada idioma (`es.json`, `pt.json`, ...).
 - `src/main.tsx`, `src/index.css`: punto de entrada y estilos base.
+
+## Agregar un idioma
+
+1. Copia `src/locales/es.json` a `src/locales/<código>.json` y traduce sus
+   valores. Las variables van entre llaves y no se traducen: `{label}`, `{next}`,
+   `{start}`, etc.
+2. En `src/i18n.tsx`: añade el código a `Lang`, importa el JSON y regístralo en
+   `RAW` y en `LANGS` (nombre y bandera para el selector).
+
+TypeScript valida que cada JSON tenga exactamente las mismas claves que
+`es.json`, así no falta ninguna cadena.
 
 ## Contacto
 

@@ -40,8 +40,10 @@ import {
   PanelRightClose,
   PanelRightOpen,
   MonitorSmartphone,
+  Check,
   type LucideIcon,
 } from "lucide-react";
+import { LangProvider, useLang, useT, LANGS, type Dict, type Lang } from "./i18n";
 
 /* ──────────────────────────────────────────────────────────────────────────
    Lumina Network Labs - Simulador Interactivo de Redes
@@ -105,9 +107,6 @@ const LEG_COLORS = ["#0056d2", "#16a34a", "#f59e0b", "#7c3aed", "#db2777", "#089
 // infraestructura intermedia (módem, ISP, torres) solo transporta bytes.
 const ENDPOINT_TYPES = new Set<NodeType>(["laptop", "smartphone", "cloud-a", "cloud-b"]);
 
-// Mensaje de ejemplo que viaja en el paquete.
-const PLAINTEXT_MSG = "Hola Mundo, nos vemos a las 5pm. Clave wifi: 12345";
-
 // Proyecto abierto y contacto. El correo se guarda en partes y se arma en
 // tiempo de ejecución para no exponerlo a los rastreadores de spam.
 const GITHUB_URL = "https://github.com/seguridades/flujo-de-internet";
@@ -134,28 +133,28 @@ const PACKET = 46; // tamaño del paquete (px)
 const HOP_MS = 850; // duración de cada salto
 
 // ── Catálogo de nodos (inventario) ───────────────────────────────────────────
+// Solo lo independiente del idioma (tipo, icono, peligro). El nombre y la
+// descripción se resuelven por idioma con t.nodes[type] / t.nodeDesc[type].
 interface InvItem {
   type: NodeType;
-  label: string;
   icon: LucideIcon;
-  desc: string;
   danger?: boolean;
 }
 
 const INVENTORY: InvItem[] = [
-  { type: "person", label: "Persona 1", icon: User, desc: "Usuario que inicia la comunicación." },
-  { type: "laptop", label: "Laptop", icon: Laptop, desc: "Dispositivo local de procesamiento." },
-  { type: "router", label: "Módem/WiFi", icon: Router, desc: "Punto de acceso local a la red." },
-  { type: "hub", label: "Colector", icon: Share2, desc: "Agregador de conexiones locales." },
-  { type: "cabling", label: "Cableado", icon: Cable, desc: "Infraestructura física de transmisión." },
-  { type: "isp", label: "ISP", icon: Server, desc: "Proveedor de Internet. Enruta los datos." },
-  { type: "cloud-a", label: "Gmail", icon: Cloud, desc: "Servidor de aplicaciones en la nube." },
-  { type: "cloud-b", label: "Hotmail", icon: CloudCog, desc: "Servidor de correo secundario." },
-  { type: "cell", label: "Torre Celular", icon: RadioTower, desc: "Estación base inalámbrica." },
-  { type: "smartphone", label: "Móvil", icon: Smartphone, desc: "Dispositivo receptor móvil." },
-  { type: "person2", label: "Persona 2", icon: UserCheck, desc: "Destinatario final del mensaje." },
-  { type: "vpn", label: "VPN", icon: ShieldCheck, desc: "Computadora de confianza en otra parte del mundo: recibe tu tráfico cifrado y lo reenvía con su propia IP." },
-  { type: "hacker", label: "Atacante MitM", icon: Skull, desc: "Entidad maliciosa interceptora.", danger: true },
+  { type: "person", icon: User },
+  { type: "laptop", icon: Laptop },
+  { type: "router", icon: Router },
+  { type: "hub", icon: Share2 },
+  { type: "cabling", icon: Cable },
+  { type: "isp", icon: Server },
+  { type: "cloud-a", icon: Cloud },
+  { type: "cloud-b", icon: CloudCog },
+  { type: "cell", icon: RadioTower },
+  { type: "smartphone", icon: Smartphone },
+  { type: "person2", icon: UserCheck },
+  { type: "vpn", icon: ShieldCheck },
+  { type: "hacker", icon: Skull, danger: true },
 ];
 
 const ICON_BY_TYPE: Record<NodeType, LucideIcon> = INVENTORY.reduce(
@@ -163,17 +162,15 @@ const ICON_BY_TYPE: Record<NodeType, LucideIcon> = INVENTORY.reduce(
   {} as Record<NodeType, LucideIcon>
 );
 
-const DESC_BY_TYPE: Record<NodeType, string> = INVENTORY.reduce(
-  (acc, it) => ({ ...acc, [it.type]: it.desc }),
-  {} as Record<NodeType, string>
-);
+// Nombre traducido de un nodo según su tipo.
+const nodeLabel = (type: NodeType, t: Dict) => t.nodes[type] ?? type;
 
-// ── Telemetría por modo ───────────────────────────────────────────────────────
-const MODE_META: Record<Mode, { latency: number; security: number; label: string }> = {
-  basico: { latency: 12, security: 18, label: "Básica" },
-  https: { latency: 18, security: 78, label: "HTTPS / TLS" },
-  e2ee: { latency: 26, security: 99, label: "Extremo a Extremo" },
-  vpn: { latency: 45, security: 88, label: "Túnel VPN" },
+// ── Telemetría por modo (números; la etiqueta de texto vive en i18n) ──────────
+const MODE_META: Record<Mode, { latency: number; security: number }> = {
+  basico: { latency: 12, security: 18 },
+  https: { latency: 18, security: 78 },
+  e2ee: { latency: 26, security: 99 },
+  vpn: { latency: 45, security: 88 },
 };
 
 interface Region {
@@ -187,29 +184,35 @@ interface Region {
 // Flujo completo (docs/espec.md): Persona1 → Laptop → Módem → Colector →
 // Cableado → ISP → Gmail → Hotmail → ISP → Cableado → Torre Celular → Móvil → Persona2.
 // El layout se ajusta a la región VISIBLE recibida (efecto "serpiente").
-function buildSequence(mode: Mode, region: Region): { nodes: NetNode[]; connections: Connection[] } {
+function buildSequence(
+  mode: Mode,
+  region: Region,
+  t: Dict
+): { nodes: NetNode[]; connections: Connection[] } {
+  const lbl = (type: NodeType) => nodeLabel(type, t);
   // Fila superior (ida, izquierda → derecha)
   const top: Array<Omit<NetNode, "id" | "x" | "y">> = [
-    { type: "person", label: "Persona 1" },
-    { type: "laptop", label: "Laptop" },
-    { type: "router", label: "Módem/WiFi" },
-    { type: "hub", label: "Colector" },
-    { type: "cabling", label: "Cableado" },
-    { type: "isp", label: "ISP" },
-    { type: "cloud-a", label: "Gmail" },
-    { type: "cloud-b", label: "Hotmail" },
+    { type: "person", label: lbl("person") },
+    { type: "laptop", label: lbl("laptop") },
+    { type: "router", label: lbl("router") },
+    { type: "hub", label: lbl("hub") },
+    { type: "cabling", label: lbl("cabling") },
+    { type: "isp", label: lbl("isp") },
+    { type: "cloud-a", label: lbl("cloud-a") },
+    { type: "cloud-b", label: lbl("cloud-b") },
   ];
   // En modo VPN insertamos el nodo VPN tras el ISP de salida (el túnel
   // cubrirá el tramo Laptop → VPN).
-  if (mode === "vpn") top.splice(6, 0, { type: "vpn", label: "VPN", location: pickVpnLocation() });
+  if (mode === "vpn")
+    top.splice(6, 0, { type: "vpn", label: lbl("vpn"), location: pickVpnLocation() });
 
   // Fila inferior (regreso, derecha → izquierda) - efecto "serpiente"
   const bottom: Array<Omit<NetNode, "id" | "x" | "y">> = [
-    { type: "isp", label: "ISP" },
-    { type: "cabling", label: "Cableado" },
-    { type: "cell", label: "Torre Celular" },
-    { type: "smartphone", label: "Móvil" },
-    { type: "person2", label: "Persona 2" },
+    { type: "isp", label: lbl("isp") },
+    { type: "cabling", label: lbl("cabling") },
+    { type: "cell", label: lbl("cell") },
+    { type: "smartphone", label: lbl("smartphone") },
+    { type: "person2", label: lbl("person2") },
   ];
 
   const padL = 60;
@@ -292,6 +295,15 @@ const uid = () => Math.random().toString(36).slice(2, 8);
 //  COMPONENTE PRINCIPAL
 // ════════════════════════════════════════════════════════════════════════════
 export default function App() {
+  return (
+    <LangProvider>
+      <AppInner />
+    </LangProvider>
+  );
+}
+
+function AppInner() {
+  const { t, lang, setLang } = useLang();
   const [nodes, setNodes] = useState<NetNode[]>([]);
   const [connections, setConnections] = useState<Connection[]>([]);
   const [mode, setMode] = useState<Mode>("basico");
@@ -526,14 +538,14 @@ export default function App() {
   // ── Auto-Armado ──────────────────────────────────────────────────────────────
   const autoAssemble = useCallback(() => {
     if (simulating) return;
-    const { nodes: ns, connections: cs } = buildSequence(mode, getRegion());
+    const { nodes: ns, connections: cs } = buildSequence(mode, getRegion(), t);
     setNodes(ns);
     setConnections(cs);
     setLogs([]);
     setActiveEdge(null);
     setPacketVisible(false);
     setDelivered({ done: 0, total: 0 });
-  }, [mode, simulating, getRegion]);
+  }, [mode, simulating, getRegion, t]);
 
   // ── Cambio de modo ───────────────────────────────────────────────────────────
   // El nodo VPN forma parte de la topología SOLO en modo VPN. Si el lienzo tiene
@@ -546,7 +558,7 @@ export default function App() {
       const isAuto = nodes.length > 0 && nodes.every((n) => n.id.startsWith("auto-"));
       const hasVpn = nodes.some((n) => n.type === "vpn");
       if (isAuto && (next === "vpn") !== hasVpn) {
-        const { nodes: ns, connections: cs } = buildSequence(next, getRegion());
+        const { nodes: ns, connections: cs } = buildSequence(next, getRegion(), t);
         setNodes(ns);
         setConnections(cs);
         setLogs([]);
@@ -555,7 +567,7 @@ export default function App() {
         setDelivered({ done: 0, total: 0 });
       }
     },
-    [nodes, simulating, getRegion]
+    [nodes, simulating, getRegion, t]
   );
 
   // ── Modo Taller: reparte los nodos del flujo inicial DESORDENADOS ────────────
@@ -565,20 +577,21 @@ export default function App() {
     if (simulating) return;
 
     // Flujo inicial completo (con ISP y Cableado repetidos = 13 nodos).
+    const lbl = (type: NodeType) => nodeLabel(type, t);
     const specs: Array<Pick<NetNode, "type" | "label">> = [
-      { type: "person", label: "Persona 1" },
-      { type: "laptop", label: "Laptop" },
-      { type: "router", label: "Módem/WiFi" },
-      { type: "hub", label: "Colector" },
-      { type: "cabling", label: "Cableado" },
-      { type: "isp", label: "ISP" },
-      { type: "cloud-a", label: "Gmail" },
-      { type: "cloud-b", label: "Hotmail" },
-      { type: "isp", label: "ISP" },
-      { type: "cabling", label: "Cableado" },
-      { type: "cell", label: "Torre Celular" },
-      { type: "smartphone", label: "Móvil" },
-      { type: "person2", label: "Persona 2" },
+      { type: "person", label: lbl("person") },
+      { type: "laptop", label: lbl("laptop") },
+      { type: "router", label: lbl("router") },
+      { type: "hub", label: lbl("hub") },
+      { type: "cabling", label: lbl("cabling") },
+      { type: "isp", label: lbl("isp") },
+      { type: "cloud-a", label: lbl("cloud-a") },
+      { type: "cloud-b", label: lbl("cloud-b") },
+      { type: "isp", label: lbl("isp") },
+      { type: "cabling", label: lbl("cabling") },
+      { type: "cell", label: lbl("cell") },
+      { type: "smartphone", label: lbl("smartphone") },
+      { type: "person2", label: lbl("person2") },
     ];
 
     // Región VISIBLE del lienzo (considera scroll y zoom).
@@ -626,7 +639,7 @@ export default function App() {
     setActiveEdge(null);
     setPacketVisible(false);
     setDelivered({ done: 0, total: 0 });
-  }, [simulating, getRegion]);
+  }, [simulating, getRegion, t]);
 
   // ── Reset ─────────────────────────────────────────────────────────────────────
   const reset = useCallback(() => {
@@ -684,11 +697,7 @@ export default function App() {
       ["person2", "smartphone", "cloud-a", "cloud-b"].includes(n.type)
     );
     if (path.length < 2 || !reachesDest) {
-      addLog(
-        "ERROR: flujo incompleto. Conecta Persona 1 hasta un destino válido.",
-        COLORS.red,
-        0
-      );
+      addLog(t.sim.errorIncomplete(nodeLabel("person", t)), COLORS.red, 0);
       setErrorFlash(true);
       setTimeout(() => setErrorFlash(false), 1200);
       return;
@@ -703,7 +712,7 @@ export default function App() {
     setActiveLeg(null);
     setLogs([]);
     setDelivered({ done: 0, total: path.length - 1 });
-    addLog(`Iniciando simulación - Modo ${meta.label.toUpperCase()}`, COLORS.primary, 0);
+    addLog(t.sim.starting(t.modeMeta[mode]), COLORS.primary, 0);
 
     // Extremos de cifrado a lo largo del camino (para la narración en HTTPS).
     const tlsOrder = path.map((n, i) => (ENDPOINT_TYPES.has(n.type) ? i : -1)).filter((i) => i >= 0);
@@ -714,9 +723,9 @@ export default function App() {
     const destDev = e2eeDevices[e2eeDevices.length - 1];
 
     if (mode === "e2ee") {
-      addLog("Cifrado de extremo a extremo: solo el origen y el destino tienen la llave.", COLORS.amber, 0);
+      addLog(t.sim.e2eeIntro, COLORS.amber, 0);
     } else if (mode === "vpn") {
-      addLog("Túnel VPN activo: el tráfico viaja encapsulado y cifrado.", COLORS.purple, 0);
+      addLog(t.sim.vpnIntro, COLORS.purple, 0);
     }
 
     const first = center(path[0]);
@@ -725,19 +734,20 @@ export default function App() {
     await wait(250);
     if (cancelled()) return;
 
-    let t = 0;
+    let tm = 0;
     for (let i = 1; i < path.length; i++) {
       const node = path[i];
       const prev = path[i - 1];
+      const nodeLbl = nodeLabel(node.type, t);
       setKeyExplain(null); // limpia la explicación del paso anterior
       setActiveEdge([prev.id, node.id]);
       const c = center(node);
       setPacketPos({ x: c.x - PACKET / 2, y: c.y - PACKET / 2 });
 
       const hop = meta.latency / (path.length - 1) + Math.random() * 3;
-      t += hop;
+      tm += hop;
       const color = i % 2 === 0 ? COLORS.blue : COLORS.green;
-      addLog(`Paquete recibido en ${node.label} - Procesando...`, color, +t.toFixed(1));
+      addLog(t.sim.received(nodeLbl), color, +tm.toFixed(1));
       setDelivered({ done: i, total: path.length - 1 });
 
       await wait(HOP_MS);
@@ -749,6 +759,7 @@ export default function App() {
         const order = tlsOrder.indexOf(i);
         const nextI = tlsOrder[order + 1];
         const next = nextI != null ? path[nextI] : null;
+        const nextLbl = next ? nodeLabel(next.type, t) : null;
         const isCloud = node.type === "cloud-a" || node.type === "cloud-b";
 
         let title = "";
@@ -759,29 +770,29 @@ export default function App() {
 
         if (order === 0) {
           // Origen: cifra y lo manda a la red (en la red ya no se puede leer).
-          title = "Aquí inicia la llave segura";
-          text = `${node.label} cifra el mensaje. Desde aquí viaja cifrado hasta ${next?.label ?? "el siguiente nodo"}, ilegible en la red.`;
+          title = t.sim.httpsStartTitle;
+          text = t.sim.httpsStartText(nodeLbl, nextLbl ?? t.sim.nextNode);
           readable = false;
         } else if (isCloud) {
           // Nube intermedia: descifra, lee y vuelve a cifrar para reenviar.
-          title = `Aquí ${node.label} abre la llave`;
-          text = `Tiene la llave: descifra el contenido y puede leerlo. Luego lo vuelve a cifrar con una nueva llave hacia ${next?.label ?? "el destino"}.`;
+          title = t.sim.httpsCloudTitle(nodeLbl);
+          text = t.sim.httpsCloudText(nextLbl ?? t.sim.destFallback);
           expColor = COLORS.amber;
           readable = true;
           reencrypts = !!next;
-          addLog(`${node.label} descifra el contenido y lo vuelve a cifrar (puede leerlo).`, COLORS.amber, +t.toFixed(1));
+          addLog(t.sim.httpsCloudLog(nodeLbl), COLORS.amber, +tm.toFixed(1));
         } else if (!next) {
           // Destino final: descifra y lee el contenido.
-          title = "Aquí termina la llave segura";
-          text = `${node.label} descifra el contenido final con su llave y lo lee.`;
+          title = t.sim.httpsEndTitle;
+          text = t.sim.httpsEndText(nodeLbl);
           expColor = COLORS.green;
           readable = true;
-          addLog(`${node.label} recibe y descifra el contenido final.`, COLORS.green, +t.toFixed(1));
+          addLog(t.sim.httpsEndLog(nodeLbl), COLORS.green, +tm.toFixed(1));
         }
 
-        if (next) {
+        if (next && nextLbl) {
           const legColor = LEG_COLORS[order % LEG_COLORS.length];
-          addLog(`Llave segura: ${node.label} -> ${next.label}`, legColor, +t.toFixed(1));
+          addLog(t.sim.secureLegLog(nodeLbl, nextLbl), legColor, +tm.toFixed(1));
           setActiveLeg(order); // resalta la línea de este tramo
         } else {
           setActiveLeg(null);
@@ -803,24 +814,27 @@ export default function App() {
         let readable = false;
 
         if (node.id === originDevId) {
-          title = "Cifrado de extremo a extremo";
-          text = `${node.label} cifra el mensaje con una llave que solo comparte con ${destDev?.label ?? "el destino"}. Viaja cifrado todo el camino.`;
+          title = t.sim.e2eeStartTitle;
+          text = t.sim.e2eeStartText(
+            nodeLbl,
+            destDev ? nodeLabel(destDev.type, t) : t.sim.destFallback
+          );
           expColor = COLORS.amber;
           readable = false;
           setActiveLeg(0);
         } else if (node.id === destDev?.id) {
-          title = "Solo el destino lo lee";
-          text = `${node.label} descifra el contenido con su llave compartida. Nadie en medio pudo leerlo.`;
+          title = t.sim.e2eeEndTitle;
+          text = t.sim.e2eeEndText(nodeLbl);
           expColor = COLORS.green;
           readable = true;
           setActiveLeg(null);
-          addLog(`${node.label} descifra el contenido final (destino).`, COLORS.green, +t.toFixed(1));
+          addLog(t.sim.e2eeEndLog(nodeLbl), COLORS.green, +tm.toFixed(1));
         } else if (isCloud) {
-          title = `${node.label} no puede leerlo`;
-          text = `Solo reenvía datos cifrados: no tiene la llave para abrirlos. A diferencia de HTTPS, aquí el servidor no ve el contenido.`;
+          title = t.sim.e2eeCloudTitle(nodeLbl);
+          text = t.sim.e2eeCloudText;
           expColor = COLORS.green;
           readable = false;
-          addLog(`${node.label} reenvía el contenido cifrado (no puede leerlo).`, COLORS.green, +t.toFixed(1));
+          addLog(t.sim.e2eeCloudLog(nodeLbl), COLORS.green, +tm.toFixed(1));
         }
 
         if (title) {
@@ -835,11 +849,9 @@ export default function App() {
       // Punto didáctico: el atacante MitM intenta leer el paquete.
       if (node.type === "hacker") {
         addLog(
-          encrypted
-            ? "Atacante MitM intercepta el tráfico, pero está cifrado, ilegible."
-            : "Atacante MitM interceptó el mensaje en TEXTO PLANO.",
+          encrypted ? t.sim.mitmEncrypted : t.sim.mitmPlain,
           encrypted ? COLORS.green : COLORS.red,
-          +t.toFixed(1)
+          +tm.toFixed(1)
         );
         setInterception({ readable: !encrypted });
         await new Promise<void>((resolve) => {
@@ -849,14 +861,14 @@ export default function App() {
       }
     }
 
-    addLog("Entrega exitosa. Conexión cerrada.", COLORS.green, +t.toFixed(1));
+    addLog(t.sim.delivered, COLORS.green, +tm.toFixed(1));
     setPacketsSent((p) => p + 1);
     setActiveEdge(null);
     setActiveLeg(null);
     setKeyExplain(null);
     setSimulating(false);
     setTimeout(() => setPacketVisible(false), 600);
-  }, [nodes, connections, simulating, meta, encrypted, addLog]);
+  }, [nodes, connections, simulating, meta, mode, encrypted, addLog, t]);
 
   // ── Geometría del túnel VPN ───────────────────────────────────────────────────
   const vpnTunnel = useMemo(() => {
@@ -918,8 +930,8 @@ export default function App() {
         legs.push({
           a: tls[i],
           b: tls[i + 1],
-          from: tls[i].label,
-          to: tls[i + 1].label,
+          from: nodeLabel(tls[i].type, t),
+          to: nodeLabel(tls[i + 1].type, t),
           color: LEG_COLORS[i % LEG_COLORS.length],
         });
       }
@@ -930,11 +942,17 @@ export default function App() {
       if (devices.length >= 2) {
         const a = devices[0];
         const b = devices[devices.length - 1];
-        legs.push({ a, b, from: a.label, to: b.label, color: COLORS.amber });
+        legs.push({
+          a,
+          b,
+          from: nodeLabel(a.type, t),
+          to: nodeLabel(b.type, t),
+          color: COLORS.amber,
+        });
       }
     }
     return legs;
-  }, [mode, nodes, connections]);
+  }, [mode, nodes, connections, t]);
 
   // ════════════════════════════════════════════════════════════════════════════
   return (
@@ -951,54 +969,55 @@ export default function App() {
           </span>
           <div className="h-6 w-px bg-outline-variant" />
           <span className="text-xs font-bold uppercase tracking-widest text-on-surface-variant">
-            Simulador de Flujo
+            {t.header.subtitle}
           </span>
         </div>
 
         <div className="hidden items-center gap-7 md:flex">
-          <Stat label="Latencia" value={`${meta.latency} ms`} color={COLORS.primary} />
-          <Stat label="Seguridad" value={`${meta.security}%`} color={encrypted ? COLORS.green : COLORS.red} />
-          <Stat label="Paquetes" value={`${delivered.done}/${delivered.total} · ${packetsSent}✓`} color={COLORS.primary} />
+          <Stat label={t.header.statLatency} value={`${meta.latency} ms`} color={COLORS.primary} />
+          <Stat label={t.header.statSecurity} value={`${meta.security}%`} color={encrypted ? COLORS.green : COLORS.red} />
+          <Stat label={t.header.statPackets} value={`${delivered.done}/${delivered.total} · ${packetsSent}✓`} color={COLORS.primary} />
         </div>
 
         <div className="flex items-center gap-2">
-          <IconBtn title="Manual de uso" onClick={() => setManualOpen(true)}>
+          <LangSelect lang={lang} setLang={setLang} title={t.langLabel} />
+          <IconBtn title={t.header.manual} onClick={() => setManualOpen(true)}>
             <HelpCircle size={18} />
           </IconBtn>
-          <IconBtn title="Acerca de" onClick={() => setAboutOpen(true)}>
+          <IconBtn title={t.header.about} onClick={() => setAboutOpen(true)}>
             <Info size={18} />
           </IconBtn>
-          <IconBtn title="Exportar como imagen (PNG)" onClick={exportPNG}>
+          <IconBtn title={t.header.exportPng} onClick={exportPNG}>
             <ImageDown size={18} />
           </IconBtn>
           <button
             onClick={scatterNodes}
             className="flex items-center gap-2 rounded-lg px-3 py-2 font-semibold text-amber transition-colors hover:bg-amber/10"
-            title="Coloca los 13 nodos desordenados para que el grupo los acomode (modo taller)"
+            title={t.header.scatterTitle}
           >
             <Shuffle size={18} />
-            <span className="text-sm">Desordenar</span>
+            <span className="text-sm">{t.header.scatter}</span>
           </button>
           <button
             onClick={autoAssemble}
             className="flex items-center gap-2 rounded-lg px-3 py-2 font-semibold text-secondary transition-colors hover:bg-secondary/10"
-            title="Genera el flujo completo automáticamente"
+            title={t.header.autoAssembleTitle}
           >
             <Sparkles size={18} />
-            <span className="text-sm">Auto-Armado</span>
+            <span className="text-sm">{t.header.autoAssemble}</span>
           </button>
           <button
             onClick={reset}
             className="flex items-center gap-2 rounded-full bg-outline-variant px-4 py-2 font-bold text-on-surface-variant transition hover:brightness-95"
           >
-            <RotateCcw size={16} /> Reset
+            <RotateCcw size={16} /> {t.header.reset}
           </button>
           <button
             onClick={simulate}
             disabled={simulating}
             className="flex items-center gap-2 rounded-full bg-primary-container px-6 py-2 font-bold text-white shadow-md transition hover:brightness-110 disabled:opacity-50"
           >
-            <Play size={18} /> {simulating ? "Enviando..." : "Enviar"}
+            <Play size={18} /> {simulating ? t.header.sending : t.header.send}
           </button>
         </div>
       </header>
@@ -1010,14 +1029,14 @@ export default function App() {
         <aside className="z-40 flex w-72 shrink-0 flex-col border-r border-outline-variant bg-surface-low shadow-sm">
           <div className="flex items-start justify-between px-5 pt-5">
             <div>
-              <h2 className="text-lg font-semibold">Inventario</h2>
+              <h2 className="text-lg font-semibold">{t.inventory.title}</h2>
               <p className="mt-0.5 text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">
-                Nodos &amp; Herramientas
+                {t.inventory.subtitle}
               </p>
             </div>
             <button
               onClick={() => setInvOpen(false)}
-              title="Ocultar inventario"
+              title={t.inventory.hide}
               className="rounded-lg p-1.5 text-on-surface-variant transition-colors hover:bg-surface-variant"
             >
               <PanelLeftClose size={18} />
@@ -1027,18 +1046,18 @@ export default function App() {
           <div className="px-4 pt-4">
             <div className="rounded-xl border border-outline-variant bg-surface p-3 text-[11px] leading-snug text-on-surface-variant">
               <p className="mb-1 flex items-center gap-1.5 font-bold text-on-surface">
-                <Cable size={14} className="text-primary" /> Cómo conectar
+                <Cable size={14} className="text-primary" /> {t.inventory.howToTitle}
               </p>
-              Arrastra un nodo al lienzo. Para crear un cable, arrastra desde el{" "}
-              <span className="font-bold text-primary">punto azul</span> de un nodo hasta otro.
-              Click en un cable para eliminarlo.
+              {t.inventory.howTo1}
+              <span className="font-bold text-primary">{t.inventory.howToBlue}</span>
+              {t.inventory.howTo2}
             </div>
           </div>
 
           <nav className="lumina-scroll mt-4 flex-1 overflow-y-auto px-4 pb-6">
             <div className="grid grid-cols-2 gap-2">
               {INVENTORY.map((item) => (
-                <InventoryCard key={item.label} item={item} />
+                <InventoryCard key={item.type} item={item} />
               ))}
             </div>
           </nav>
@@ -1046,7 +1065,7 @@ export default function App() {
         ) : (
           <button
             onClick={() => setInvOpen(true)}
-            title="Mostrar inventario"
+            title={t.inventory.show}
             className="z-40 flex w-10 shrink-0 flex-col items-center gap-3 border-r border-outline-variant bg-surface-low py-4 text-on-surface-variant transition-colors hover:bg-surface-variant"
           >
             <PanelLeftOpen size={18} />
@@ -1054,7 +1073,7 @@ export default function App() {
               className="text-[10px] font-bold uppercase tracking-widest"
               style={{ writingMode: "vertical-rl" }}
             >
-              Inventario
+              {t.inventory.title}
             </span>
           </button>
         )}
@@ -1093,7 +1112,7 @@ export default function App() {
                       className="absolute -top-3 left-4 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-white"
                       style={{ background: COLORS.purple }}
                     >
-                      Túnel VPN cifrado
+                      {t.canvas.vpnTunnel}
                     </span>
                   </motion.div>
                 )}
@@ -1148,7 +1167,7 @@ export default function App() {
                         strokeWidth={18}
                         style={{ pointerEvents: "stroke" }}
                       />
-                      <title>Click para eliminar este cable</title>
+                      <title>{t.canvas.deleteCable}</title>
                     </g>
                   );
                 })}
@@ -1232,8 +1251,9 @@ export default function App() {
             <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center text-center text-on-surface-variant">
               <Sparkles size={40} className="mb-3 opacity-40" />
               <p className="text-sm">
-                Arrastra nodos desde el inventario o pulsa{" "}
-                <span className="font-bold text-secondary">Auto-Armado</span>.
+                {t.canvas.empty1}
+                <span className="font-bold text-secondary">{t.canvas.emptyBold}</span>
+                {t.canvas.empty2}
               </p>
             </div>
           )}
@@ -1243,7 +1263,7 @@ export default function App() {
             <div className="absolute bottom-4 left-4 z-40 w-56 rounded-xl border border-outline-variant bg-white/95 p-3 shadow-xl backdrop-blur">
               <div className="mb-2 flex items-center gap-1.5 text-[12px] font-bold text-on-surface">
                 <Lock size={14} className="text-primary" />
-                {mode === "https" ? "HTTPS: cifrado por tramos" : "E2EE: extremo a extremo"}
+                {mode === "https" ? t.canvas.legendHttps : t.canvas.legendE2ee}
               </div>
               <div className="space-y-1.5">
                 {secureLegs.map((leg, i) => (
@@ -1258,8 +1278,9 @@ export default function App() {
               </div>
               {mode === "e2ee" && (
                 <p className="mt-2 border-t border-outline-variant pt-2 text-[10px] leading-snug text-on-surface-variant">
-                  Una sola llave: solo origen y destino. Las nubes{" "}
-                  <span className="font-bold text-secondary">no pueden leer</span> el contenido.
+                  {t.canvas.legendE2eeNote1}
+                  <span className="font-bold text-secondary">{t.canvas.legendE2eeNoteBold}</span>
+                  {t.canvas.legendE2eeNote2}
                 </p>
               )}
             </div>
@@ -1267,14 +1288,14 @@ export default function App() {
 
           {/* Controles de zoom */}
           <div className="absolute bottom-24 right-6 z-40 flex flex-col gap-1.5 rounded-full border border-outline-variant bg-white/90 p-1.5 shadow-xl backdrop-blur">
-            <ZoomBtn title="Acercar" onClick={() => setZoom((z) => Math.min(2, +(z + 0.1).toFixed(2)))}>
+            <ZoomBtn title={t.canvas.zoomIn} onClick={() => setZoom((z) => Math.min(2, +(z + 0.1).toFixed(2)))}>
               <Plus size={18} />
             </ZoomBtn>
-            <ZoomBtn title="Alejar" onClick={() => setZoom((z) => Math.max(0.4, +(z - 0.1).toFixed(2)))}>
+            <ZoomBtn title={t.canvas.zoomOut} onClick={() => setZoom((z) => Math.max(0.4, +(z - 0.1).toFixed(2)))}>
               <Minus size={18} />
             </ZoomBtn>
             <ZoomBtn
-              title="Restablecer"
+              title={t.canvas.zoomReset}
               onClick={() => {
                 setZoom(1);
                 canvasRef.current?.scrollTo({ left: 0, top: 0, behavior: "smooth" });
@@ -1289,10 +1310,10 @@ export default function App() {
 
           {/* Selector de modos */}
           <nav className="absolute bottom-6 left-1/2 z-40 flex -translate-x-1/2 items-center gap-1 rounded-full border border-outline-variant bg-white/80 p-1.5 shadow-lg backdrop-blur">
-            <ModeBtn current={mode} value="basico" onClick={changeMode} icon={Mail} label="Básico" />
-            <ModeBtn current={mode} value="https" onClick={changeMode} icon={Lock} label="HTTPS" />
-            <ModeBtn current={mode} value="e2ee" onClick={changeMode} icon={ShieldCheck} label="E2EE" />
-            <ModeBtn current={mode} value="vpn" onClick={changeMode} icon={ShieldCheck} label="VPN" />
+            <ModeBtn current={mode} value="basico" onClick={changeMode} icon={Mail} label={t.modes.basico} />
+            <ModeBtn current={mode} value="https" onClick={changeMode} icon={Lock} label={t.modes.https} />
+            <ModeBtn current={mode} value="e2ee" onClick={changeMode} icon={ShieldCheck} label={t.modes.e2ee} />
+            <ModeBtn current={mode} value="vpn" onClick={changeMode} icon={ShieldCheck} label={t.modes.vpn} />
           </nav>
 
           {/* Inspector DPI */}
@@ -1345,20 +1366,20 @@ export default function App() {
             <div className="flex items-center gap-2">
               <button
                 onClick={() => setLogOpen(false)}
-                title="Ocultar log"
+                title={t.log.hide}
                 className="rounded-lg p-1.5 text-on-surface-variant transition-colors hover:bg-surface-variant"
               >
                 <PanelRightClose size={18} />
               </button>
-              <h2 className="font-bold">Log</h2>
+              <h2 className="font-bold">{t.log.title}</h2>
             </div>
             <span className="rounded-full bg-primary px-2 py-0.5 text-[9px] font-bold uppercase text-white">
-              Pro
+              {t.log.badge}
             </span>
           </div>
           <div className="lumina-scroll flex-1 space-y-1.5 overflow-y-auto p-3 font-mono text-[11px]">
             {logs.length === 0 && (
-              <div className="italic text-on-surface-variant">Esperando simulación...</div>
+              <div className="italic text-on-surface-variant">{t.log.waiting}</div>
             )}
             {logs.map((l) => (
               <div
@@ -1377,7 +1398,7 @@ export default function App() {
         ) : (
           <button
             onClick={() => setLogOpen(true)}
-            title="Mostrar log"
+            title={t.log.show}
             className="z-40 flex w-10 shrink-0 flex-col items-center gap-3 border-l border-outline-variant bg-surface-high py-4 text-on-surface-variant transition-colors hover:bg-surface-variant"
           >
             <PanelRightOpen size={18} />
@@ -1385,7 +1406,7 @@ export default function App() {
               className="text-[10px] font-bold uppercase tracking-widest"
               style={{ writingMode: "vertical-rl" }}
             >
-              Log
+              {t.log.title}
             </span>
           </button>
         )}
@@ -1401,22 +1422,89 @@ export default function App() {
 // ════════════════════════════════════════════════════════════════════════════
 
 function LowResGate() {
+  const t = useT();
   return (
     <div className="fixed inset-0 z-[999] flex flex-col items-center justify-center bg-background px-8 text-center">
       <MonitorSmartphone size={56} className="mb-5 text-primary" />
-      <h1 className="mb-3 text-xl font-bold">Pantalla demasiado pequeña</h1>
+      <h1 className="mb-3 text-xl font-bold">{t.lowRes.title}</h1>
       <p className="max-w-md text-sm leading-relaxed text-on-surface-variant">
         <span style={{ fontFamily: '"Quicksand", sans-serif', fontWeight: 600 }}>
           <span style={{ color: "#08c2e2" }}>seguridad</span>
           <span style={{ color: "#d15892" }}>es</span>
-        </span>{" "}
-        es una herramienta diseñada para <span className="font-semibold text-on-surface">navegador de escritorio</span>.
-        Para su correcto funcionamiento se necesita una resolución mínima de{" "}
-        <span className="font-mono font-bold text-on-surface">1024 × 600</span>.
+        </span>
+        {t.lowRes.body1}
+        <span className="font-semibold text-on-surface">{t.lowRes.bodyBold}</span>
+        {t.lowRes.body2}
+        <span className="font-mono font-bold text-on-surface">{t.lowRes.res}</span>.
       </p>
-      <p className="mt-4 text-xs text-on-surface-variant">
-        Amplía la ventana o utiliza una pantalla más grande.
-      </p>
+      <p className="mt-4 text-xs text-on-surface-variant">{t.lowRes.hint}</p>
+    </div>
+  );
+}
+
+// Selector de idioma (dropdown). Diseñado para crecer: lista LANGS completa.
+function LangSelect({
+  lang,
+  setLang,
+  title,
+}: {
+  lang: Lang;
+  setLang: (l: Lang) => void;
+  title: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  const current = LANGS.find((l) => l.code === lang) ?? LANGS[0];
+
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    window.addEventListener("mousedown", onDown);
+    return () => window.removeEventListener("mousedown", onDown);
+  }, [open]);
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        title={title}
+        onClick={() => setOpen((o) => !o)}
+        className="flex items-center rounded-lg px-2.5 py-2 text-sm font-bold uppercase tracking-wide text-on-surface-variant transition-colors hover:bg-surface-variant"
+      >
+        {current.code}
+      </button>
+      <AnimatePresence>
+        {open && (
+          <motion.ul
+            initial={{ opacity: 0, y: -6 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -6 }}
+            transition={{ duration: 0.12 }}
+            className="absolute right-0 top-full z-[90] mt-1 w-44 overflow-hidden rounded-xl border border-outline-variant bg-white py-1 shadow-xl"
+          >
+            {LANGS.map((l) => (
+              <li key={l.code}>
+                <button
+                  onClick={() => {
+                    setLang(l.code);
+                    setOpen(false);
+                  }}
+                  className={`flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-sm transition-colors hover:bg-surface-variant ${
+                    l.code === lang ? "font-bold text-primary" : "text-on-surface"
+                  }`}
+                >
+                  <span className="flex items-center gap-2">
+                    <span>{l.flag}</span>
+                    {l.name}
+                  </span>
+                  {l.code === lang && <Check size={15} className="text-primary" />}
+                </button>
+              </li>
+            ))}
+          </motion.ul>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
@@ -1504,15 +1592,17 @@ function ModeBtn({
 }
 
 function InventoryCard({ item }: { item: InvItem }) {
+  const t = useT();
   const Icon = item.icon;
+  const label = nodeLabel(item.type, t);
   return (
     <div
       draggable
       onDragStart={(e) => {
         e.dataTransfer.setData("type", item.type);
-        e.dataTransfer.setData("label", item.label);
+        e.dataTransfer.setData("label", label);
       }}
-      title={item.desc}
+      title={t.nodeDesc[item.type] ?? ""}
       className="group flex cursor-grab flex-col items-center justify-center rounded-xl border border-outline-variant bg-white p-3 transition-all hover:border-primary hover:bg-surface-variant active:cursor-grabbing"
     >
       <Icon
@@ -1522,7 +1612,7 @@ function InventoryCard({ item }: { item: InvItem }) {
         }`}
       />
       <span className="mt-1 text-center text-[10px] font-bold uppercase tracking-wide">
-        {item.label}
+        {label}
       </span>
     </div>
   );
@@ -1543,9 +1633,11 @@ function NodeCard({
   onStartLink: (e: React.PointerEvent) => void;
   onRemove: () => void;
 }) {
+  const t = useT();
   const Icon = ICON_BY_TYPE[node.type];
   const danger = node.type === "hacker";
-  const desc = DESC_BY_TYPE[node.type];
+  const label = nodeLabel(node.type, t);
+  const desc = t.nodeDesc[node.type] ?? "";
 
   // El tooltip sale hacia arriba por defecto, pero si el card está pegado al
   // tope (donde lo taparía el header) lo volteamos hacia abajo. Se mide al
@@ -1576,7 +1668,7 @@ function NodeCard({
         }`}
       >
         <div className="mb-0.5 border-b border-white/10 pb-1 text-[11px] font-bold">
-          {node.label}
+          {label}
         </div>
         <div className="text-[10px] leading-snug opacity-90">{desc}</div>
         <div
@@ -1599,7 +1691,7 @@ function NodeCard({
         {/* Puerto de conexión: arrastra desde aquí hacia otro nodo */}
         <div
           onPointerDown={onStartLink}
-          title="Arrastra para conectar"
+          title={t.canvas.connectPort}
           className="absolute top-1/2 -right-3 z-30 flex h-5 w-5 -translate-y-1/2 cursor-crosshair items-center justify-center rounded-full border-2 border-white bg-primary-container opacity-0 shadow transition-opacity group-hover:opacity-100"
         >
           <span className="h-1.5 w-1.5 rounded-full bg-white" />
@@ -1633,7 +1725,7 @@ function NodeCard({
         </button>
       </div>
       <span className="w-24 text-center text-[10px] font-bold uppercase tracking-wide text-on-surface-variant">
-        {node.label}
+        {label}
       </span>
       {node.location && (
         <span className="-mt-0.5 flex items-center gap-1 rounded-full bg-primary-container/10 px-2 py-0.5 text-[9px] font-semibold text-primary">
@@ -1653,6 +1745,7 @@ function Packet({
   encrypted: boolean;
   onClick: () => void;
 }) {
+  const t = useT();
   const glow = encrypted ? "0 0 18px rgba(22,163,74,0.7)" : "0 0 16px rgba(0,86,210,0.45)";
   const Icon = encrypted ? Lock : Mail;
   return (
@@ -1680,7 +1773,7 @@ function Packet({
         className="absolute -top-4 left-1/2 -translate-x-1/2 whitespace-nowrap rounded px-1.5 py-0.5 text-[7px] font-bold text-white"
         style={{ background: encrypted ? COLORS.green : COLORS.blue }}
       >
-        INSPECCIONAR
+        {t.packet.inspect}
       </span>
     </motion.div>
   );
@@ -1701,6 +1794,7 @@ function KeyExplainModal({
   reencrypts: boolean;
   onContinue: () => void;
 }) {
+  const t = useT();
   const cipher = useMemo(
     () =>
       "0x" +
@@ -1736,19 +1830,19 @@ function KeyExplainModal({
           {readable ? (
             <div>
               <p className="mb-1 text-[10px] font-bold uppercase tracking-wide text-on-surface-variant">
-                Contenido visible (descifrado)
+                {t.keyModal.visible}
               </p>
               <div
                 className="rounded-lg border bg-black/[0.03] p-3 text-[13px]"
                 style={{ borderColor: color }}
               >
-                {PLAINTEXT_MSG}
+                {t.plaintextMsg}
               </div>
             </div>
           ) : (
             <div>
               <p className="mb-1 flex items-center gap-1 text-[10px] font-bold uppercase tracking-wide text-on-surface-variant">
-                <Lock size={11} /> En la red viaja cifrado (ilegible)
+                <Lock size={11} /> {t.keyModal.encrypted}
               </p>
               <div className="break-all rounded-lg bg-[#0b1c30] p-3 font-mono text-[11px] font-semibold tracking-wide text-emerald-300">
                 {cipher}
@@ -1760,7 +1854,7 @@ function KeyExplainModal({
           {reencrypts && (
             <div>
               <p className="mb-1 flex items-center gap-1 text-[10px] font-bold uppercase tracking-wide text-on-surface-variant">
-                <Lock size={11} /> Lo vuelve a cifrar para reenviarlo
+                <Lock size={11} /> {t.keyModal.reencrypts}
               </p>
               <div className="break-all rounded-lg bg-[#0b1c30] p-3 font-mono text-[11px] font-semibold tracking-wide text-emerald-300">
                 {cipher}
@@ -1773,7 +1867,7 @@ function KeyExplainModal({
             className="w-full rounded-full py-2.5 font-bold text-white transition hover:brightness-110"
             style={{ background: color }}
           >
-            Continuar
+            {t.keyModal.continue}
           </button>
         </div>
       </motion.div>
@@ -1793,6 +1887,7 @@ function InfoModal({
   onClose: () => void;
   children: React.ReactNode;
 }) {
+  const t = useT();
   return (
     <motion.div
       initial={{ opacity: 0 }}
@@ -1817,7 +1912,7 @@ function InfoModal({
           <button
             onClick={onClose}
             className="rounded-full p-1 transition hover:bg-white/20"
-            title="Cerrar"
+            title={t.infoModal.close}
           >
             <X size={18} />
           </button>
@@ -1829,38 +1924,10 @@ function InfoModal({
 }
 
 function ManualModal({ onClose }: { onClose: () => void }) {
-  const steps: Array<{ title: string; text: string }> = [
-    {
-      title: "Arma el flujo",
-      text: "Arrastra piezas del panel izquierdo al lienzo, o pulsa Auto-Armado para generar el flujo completo de una vez.",
-    },
-    {
-      title: "Conecta los nodos",
-      text: "Arrastra desde el puerto de un nodo hasta otro para crear el cable que los une.",
-    },
-    {
-      title: "Agrega un atacante",
-      text: "Suelta la pieza Atacante MitM dentro del camino para ver qué puede leer cuando el mensaje pasa por ahí.",
-    },
-    {
-      title: "Elige un modo",
-      text: "Abajo cambia entre Básico, HTTPS, E2EE y VPN. Cada modo cambia cómo viaja y se cifra el mensaje.",
-    },
-    {
-      title: "Simula",
-      text: "Pulsa Simular y sigue la narración paso a paso. En cada pausa usa Continuar (o las teclas Enter / Espacio).",
-    },
-    {
-      title: "Modo taller",
-      text: "Desordenar reparte las piezas sin conexiones para que el grupo arme el flujo por su cuenta.",
-    },
-    {
-      title: "Exporta la imagen",
-      text: "El botón de imagen (PNG) descarga una captura del lienzo tal como está.",
-    },
-  ];
+  const t = useT();
+  const steps = t.manual.steps;
   return (
-    <InfoModal title="Manual de uso" icon={HelpCircle} onClose={onClose}>
+    <InfoModal title={t.manual.title} icon={HelpCircle} onClose={onClose}>
       <ol className="space-y-3">
         {steps.map((s, i) => (
           <li key={i} className="flex gap-3">
@@ -1879,18 +1946,20 @@ function ManualModal({ onClose }: { onClose: () => void }) {
 }
 
 function AboutModal({ onClose }: { onClose: () => void }) {
+  const t = useT();
   const mail = buildFeedbackMail();
   return (
-    <InfoModal title="Acerca de" icon={Info} onClose={onClose}>
+    <InfoModal title={t.about.title} icon={Info} onClose={onClose}>
       <div className="space-y-4">
         <p className="text-[13px] leading-relaxed text-on-surface">
-          Simulador educativo del flujo de internet, hecho para{" "}
-          <span className="font-bold">talleres en línea</span> de seguridad: muestra cómo
-          viaja un mensaje y qué protege cada modo de cifrado.
+          {t.about.p1a}
+          <span className="font-bold">{t.about.p1bold}</span>
+          {t.about.p1b}
         </p>
         <p className="text-[13px] leading-relaxed text-on-surface">
-          Es un proyecto de <span className="font-bold">código abierto</span>. Puedes ver el
-          código, reportar problemas o contribuir en GitHub.
+          {t.about.p2a}
+          <span className="font-bold">{t.about.p2bold}</span>
+          {t.about.p2b}
         </p>
         <a
           href={GITHUB_URL}
@@ -1898,11 +1967,11 @@ function AboutModal({ onClose }: { onClose: () => void }) {
           rel="noopener noreferrer"
           className="flex items-center justify-center gap-2 rounded-full bg-primary-container py-2.5 font-bold text-white transition hover:brightness-110"
         >
-          <Github size={18} /> Ver en GitHub <ExternalLink size={14} />
+          <Github size={18} /> {t.about.github} <ExternalLink size={14} />
         </a>
         <div className="rounded-lg border border-outline-variant bg-surface-variant/40 p-3">
           <p className="text-[12px] text-on-surface-variant">
-            ¿Comentarios o sugerencias? Escríbenos a{" "}
+            {t.about.feedback}{" "}
             <a
               href={`mailto:${mail}`}
               className="font-bold text-primary hover:underline"
@@ -1925,6 +1994,7 @@ function InterceptionModal({
   readable: boolean;
   onContinue: () => void;
 }) {
+  const t = useT();
   const hash = useMemo(
     () =>
       "0x" +
@@ -1956,8 +2026,8 @@ function InterceptionModal({
         >
           <Skull size={26} />
           <div>
-            <h3 className="text-sm font-bold uppercase tracking-wider">Atacante MitM</h3>
-            <p className="text-[11px] opacity-90">Interceptando el paquete en tránsito…</p>
+            <h3 className="text-sm font-bold uppercase tracking-wider">{t.interception.title}</h3>
+            <p className="text-[11px] opacity-90">{t.interception.subtitle}</p>
           </div>
         </div>
 
@@ -1966,30 +2036,30 @@ function InterceptionModal({
             <>
               <div className="flex items-center gap-2 font-bold text-danger">
                 <AlertTriangle size={18} />
-                ¡El atacante puede LEER tu mensaje!
+                {t.interception.canRead}
               </div>
               <div className="rounded-lg border border-danger/30 bg-danger/5 p-3 font-mono text-[13px] text-danger">
-                "Hola Mundo - nos vemos a las 5pm, clave wifi: 12345"
+                "{t.plaintextMsg}"
               </div>
               <p className="text-[12px] leading-relaxed text-on-surface-variant">
-                El mensaje viaja en <span className="font-bold">texto plano</span>. Cualquiera en
-                el camino (un atacante, el WiFi público o el ISP) puede leerlo e incluso
-                modificarlo. Prueba un modo cifrado (HTTPS / E2EE / VPN) y vuelve a enviar.
+                {t.interception.canReadNote1}
+                <span className="font-bold">{t.interception.canReadBold}</span>
+                {t.interception.canReadNote2}
               </p>
             </>
           ) : (
             <>
               <div className="flex items-center gap-2 font-bold text-secondary">
                 <ShieldCheck size={18} />
-                El atacante no puede leer nada
+                {t.interception.cantRead}
               </div>
               <div className="break-all rounded-lg border border-secondary/30 bg-secondary/5 p-3 font-mono text-[12px] text-secondary">
                 {hash}
               </div>
               <p className="text-[12px] leading-relaxed text-on-surface-variant">
-                El contenido está <span className="font-bold">cifrado</span>. El atacante solo ve
-                bytes ilegibles: no puede leer ni alterar el mensaje sin la llave. Eso es lo que
-                protege HTTPS, el cifrado de extremo a extremo y la VPN.
+                {t.interception.cantReadNote1}
+                <span className="font-bold">{t.interception.cantReadBold}</span>
+                {t.interception.cantReadNote2}
               </p>
             </>
           )}
@@ -1998,7 +2068,7 @@ function InterceptionModal({
             onClick={onContinue}
             className="w-full rounded-full bg-primary-container py-2.5 font-bold text-white transition hover:brightness-110"
           >
-            Continuar
+            {t.interception.continue}
           </button>
         </div>
       </motion.div>
@@ -2015,6 +2085,7 @@ function DpiInspector({
   mode: Mode;
   onClose: () => void;
 }) {
+  const t = useT();
   const hash = useMemo(
     () =>
       "0x" +
@@ -2036,7 +2107,7 @@ function DpiInspector({
       <div className="flex items-center justify-between border-b border-white/10 bg-white/5 px-4 py-3">
         <div className="flex items-center gap-2">
           <Search size={14} className="text-[#8ab4ff]" />
-          <h3 className="text-xs font-bold uppercase tracking-wider">Deep Packet Inspector</h3>
+          <h3 className="text-xs font-bold uppercase tracking-wider">{t.dpi.title}</h3>
         </div>
         <button onClick={onClose} className="rounded p-1 hover:bg-white/10">
           <X size={14} />
@@ -2045,41 +2116,39 @@ function DpiInspector({
 
       <div className="space-y-4 p-4">
         <div>
-          <p className="mb-2 text-[9px] font-bold uppercase opacity-50">Metadata</p>
+          <p className="mb-2 text-[9px] font-bold uppercase opacity-50">{t.dpi.metadata}</p>
           <div className="grid grid-cols-2 gap-2 text-[10px]">
             <div className="rounded bg-white/5 p-2">
-              <span className="block opacity-50">Protocolo</span>
+              <span className="block opacity-50">{t.dpi.protocol}</span>
               <span className="font-mono font-bold text-[#8ab4ff]">
                 {encrypted ? "HTTPS/TLS 1.3" : "HTTP/TCP"}
               </span>
             </div>
             <div className="rounded bg-white/5 p-2">
-              <span className="block opacity-50">Cifrado</span>
+              <span className="block opacity-50">{t.dpi.cipher}</span>
               <span
                 className="font-mono font-bold"
                 style={{ color: encrypted ? "#4ae176" : "#ff9a8a" }}
               >
-                {mode === "e2ee" ? "E2EE/AES-256" : encrypted ? "AES-256-GCM" : "NINGUNO"}
+                {mode === "e2ee" ? "E2EE/AES-256" : encrypted ? "AES-256-GCM" : t.dpi.none}
               </span>
             </div>
           </div>
         </div>
 
         <div>
-          <p className="mb-2 text-[9px] font-bold uppercase opacity-50">Payload (Contenido)</p>
+          <p className="mb-2 text-[9px] font-bold uppercase opacity-50">{t.dpi.payload}</p>
           <div
             className="min-h-[96px] break-all rounded-lg bg-black/40 p-3 font-mono text-[11px]"
             style={{ color: encrypted ? "#4ade80" : "#f87171" }}
           >
-            {encrypted ? hash : "Hola Mundo - nos vemos a las 5pm, clave wifi: 12345"}
+            {encrypted ? hash : t.plaintextMsg}
           </div>
         </div>
 
         <div className="rounded border border-[#8ab4ff]/30 bg-[#8ab4ff]/10 p-2 text-[9px] leading-tight">
-          <span className="mb-1 block font-bold">Nota del Analista:</span>
-          {encrypted
-            ? "El contenido viaja ilegible: un atacante en el camino solo ve bytes cifrados."
-            : "Modo Básico: cualquiera en la ruta (ISP, atacante) puede leer el mensaje en texto plano."}
+          <span className="mb-1 block font-bold">{t.dpi.analyst}</span>
+          {encrypted ? t.dpi.noteEnc : t.dpi.notePlain}
         </div>
       </div>
     </motion.div>
