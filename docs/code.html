@@ -1,0 +1,763 @@
+<!DOCTYPE html>
+
+<html class="light" lang="es"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Lumina Network Labs - Simulator Pro</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=Courier+Prime&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "tertiary-container": "#a93802",
+                        "on-secondary-fixed-variant": "#005321",
+                        "on-background": "#0b1c30",
+                        "surface-container-lowest": "#ffffff",
+                        "surface": "#f8f9ff",
+                        "tertiary": "#822800",
+                        "on-surface": "#0b1c30",
+                        "secondary-fixed": "#6bff8f",
+                        "surface-container-high": "#dce9ff",
+                        "on-tertiary": "#ffffff",
+                        "surface-variant": "#d3e4fe",
+                        "secondary": "#006e2f",
+                        "inverse-on-surface": "#eaf1ff",
+                        "tertiary-fixed-dim": "#ffb59b",
+                        "inverse-surface": "#213145",
+                        "error-container": "#ffdad6",
+                        "surface-container-highest": "#d3e4fe",
+                        "surface-bright": "#f8f9ff",
+                        "secondary-fixed-dim": "#4ae176",
+                        "on-error-container": "#93000a",
+                        "primary": "#0040a1",
+                        "primary-container": "#0056d2",
+                        "primary-fixed": "#dae2ff",
+                        "on-primary-container": "#ccd8ff",
+                        "on-tertiary-fixed-variant": "#812800",
+                        "on-primary-fixed-variant": "#0040a1",
+                        "on-surface-variant": "#424654",
+                        "on-tertiary-container": "#ffcebd",
+                        "surface-container-low": "#eff4ff",
+                        "on-primary-fixed": "#001847",
+                        "on-primary": "#ffffff",
+                        "outline": "#737785",
+                        "surface-container": "#e5eeff",
+                        "inverse-primary": "#b2c5ff",
+                        "on-error": "#ffffff",
+                        "surface-tint": "#0056d2",
+                        "on-secondary-fixed": "#002109",
+                        "outline-variant": "#c3c6d6",
+                        "on-tertiary-fixed": "#380d00",
+                        "error": "#ba1a1a",
+                        "tertiary-fixed": "#ffdbcf",
+                        "primary-fixed-dim": "#b2c5ff",
+                        "surface-dim": "#cbdbf5",
+                        "secondary-container": "#6bff8f",
+                        "on-secondary": "#ffffff",
+                        "on-secondary-container": "#007432",
+                        "background": "#f8f9ff",
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "full": "9999px"
+                    },
+                    "spacing": {
+                        "node-gap": "16px",
+                        "unit": "8px",
+                        "sidebar-width": "320px",
+                        "canvas-margin": "24px",
+                        "gutter": "16px"
+                    },
+                    "fontFamily": {
+                        "label-caps": ["Inter"],
+                        "headline-sm": ["Inter"],
+                        "body-md": ["Inter"],
+                        "mono-label": ["Courier Prime"],
+                        "headline-md": ["Inter"],
+                        "display-lg": ["Inter"],
+                        "body-lg": ["Inter"]
+                    }
+                },
+            },
+        }
+    </script>
+<style>
+        .canvas-grid {
+            background-image: radial-gradient(#c3c6d6 1px, transparent 1px);
+            background-size: 40px 40px;
+            background-position: center;
+            transition: background-color 0.5s ease;
+        }
+        .canvas-grid.mode-https { background-color: #f0f4ff; }
+        .canvas-grid.mode-vpn { background-color: #f5f0ff; }
+        .canvas-grid.mode-e2ee { background-color: #fff9eb; }
+
+        .connection-line {
+            stroke: #737785;
+            stroke-width: 2;
+            stroke-dasharray: 6;
+            transition: all 0.3s ease;
+            cursor: pointer;
+        }
+        .connection-line:hover { stroke-width: 4; stroke: #0040a1; }
+        .connection-line.error { stroke: #ba1a1a; stroke-dasharray: none; }
+        
+        .message-travel { transition: all 0.8s cubic-bezier(0.4, 0, 0.2, 1); }
+        
+        .node-enter { animation: nodePop 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
+        @keyframes nodePop {
+            from { transform: scale(0.5); opacity: 0; }
+            to { transform: scale(1); opacity: 1; }
+        }
+
+        .internal-architecture {
+            display: none;
+            position: absolute;
+            top: 100%;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 180px;
+            background: white;
+            border: 1px solid #c3c6d6;
+            border-radius: 8px;
+            padding: 8px;
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1);
+            z-index: 50;
+            margin-top: 10px;
+        }
+        .node-wrapper:hover .internal-architecture { display: block; }
+        
+        .drawing-line { stroke: #0056d2; stroke-width: 2; stroke-dasharray: 4; pointer-events: none; }
+
+        #inventory::-webkit-scrollbar, #traceroute-log::-webkit-scrollbar { width: 6px; }
+        #inventory::-webkit-scrollbar-thumb, #traceroute-log::-webkit-scrollbar-thumb {
+            background: #c3c6d6;
+            border-radius: 4px;
+        }
+        
+        .key-badge {
+            position: absolute;
+            bottom: -5px;
+            right: -5px;
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+            z-index: 30;
+        }
+        
+        .zoom-container {
+            transform-origin: 0 0;
+            transition: transform 0.2s ease-out;
+        }
+
+        .edu-tooltip {
+            position: absolute;
+            z-index: 100;
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.2s ease;
+            width: 220px;
+        }
+        .has-tooltip:hover .edu-tooltip { opacity: 1; }
+
+        #canvas::-webkit-scrollbar { height: 8px; } 
+        #canvas::-webkit-scrollbar-thumb { background: #c3c6d6; border-radius: 10px; } 
+        
+        .stat-card {
+            transition: all 0.3s ease;
+        }
+        .stat-card:hover { transform: translateY(-2px); }
+
+        .packet-inspector {
+            transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s ease;
+        }
+    </style>
+</head>
+<body class="bg-background text-on-background font-body-md overflow-hidden h-screen flex flex-col">
+<header class="bg-surface border-b border-outline-variant shadow-sm flex justify-between items-center w-full px-canvas-margin h-16 shrink-0 z-50">
+<div class="flex items-center gap-4">
+<span class="text-headline-sm font-headline-sm font-bold text-primary">Lumina Network Labs</span>
+<div class="h-6 w-px bg-outline-variant"></div>
+<span class="text-label-caps text-on-surface-variant uppercase tracking-widest" id="active-challenge-title">Simulador de Flujo</span>
+</div>
+<div class="hidden lg:flex items-center gap-6 px-4">
+<div class="flex flex-col items-center">
+<span class="text-[9px] uppercase text-on-surface-variant font-bold">Latencia</span>
+<span class="text-sm font-mono font-bold text-primary" id="stat-latency">-- ms</span>
+</div>
+<div class="flex flex-col items-center">
+<span class="text-[9px] uppercase text-on-surface-variant font-bold">Seguridad</span>
+<span class="text-sm font-bold text-secondary" id="stat-security">Básica</span>
+</div>
+<div class="flex flex-col items-center">
+<span class="text-[9px] uppercase text-on-surface-variant font-bold">Paquetes</span>
+<span class="text-sm font-bold" id="stat-delivery">0/0</span>
+</div>
+</div>
+<div class="flex items-center gap-unit">
+<button class="p-2 text-primary hover:bg-primary-fixed rounded-lg transition-colors flex items-center gap-2" onclick="toggleChallenges()" title="Retos">
+<span class="material-symbols-outlined">assignment</span>
+</button>
+<button class="p-2 text-on-surface-variant hover:bg-surface-variant rounded-lg transition-colors flex items-center gap-2" id="exportBtn" title="Exportar JSON">
+<span class="material-symbols-outlined">download</span>
+</button>
+<button class="px-4 py-2 text-secondary font-bold hover:bg-secondary-container rounded-lg transition-colors flex items-center gap-2" id="autoAssembleBtn" title="Genera el flujo optimizado">
+<span class="material-symbols-outlined">magic_button</span>
+<span class="text-xs">Auto-Armado</span>
+</button>
+<button class="px-4 py-2 bg-outline-variant text-on-surface-variant rounded-full font-bold hover:bg-surface-container-highest transition-all" id="resetBtn">
+            Reset
+        </button>
+<button class="px-6 py-2 bg-primary-container text-on-primary-container rounded-full font-bold shadow-md hover:brightness-110 transition-all flex items-center gap-2" id="simulateBtn">
+<span class="material-symbols-outlined text-[20px]" id="simulateIcon">play_arrow</span>
+            Enviar
+        </button>
+</div>
+</header>
+<div class="flex flex-1 overflow-hidden relative">
+<aside class="w-sidebar-width bg-surface-container-low border-r border-outline-variant flex flex-col p-unit gap-node-gap z-40 shadow-sm shrink-0">
+<div class="px-2 pt-4">
+<h2 class="font-headline-sm text-headline-sm text-on-surface">Inventario</h2>
+<p class="font-label-caps text-label-caps text-on-surface-variant uppercase tracking-widest mt-1">Nodos &amp; Herramientas</p>
+</div>
+<div class="px-2 grid grid-cols-1 gap-2">
+<button class="flex items-center gap-3 p-3 bg-surface border-2 border-dashed border-outline-variant rounded-xl hover:border-primary hover:bg-primary-fixed transition-all group" id="cableTool">
+<div class="w-10 h-10 bg-primary-container rounded-lg flex items-center justify-center text-on-primary-container">
+<span class="material-symbols-outlined">cable</span>
+</div>
+<div class="text-left">
+<div class="font-bold text-body-md">Cable/Conexión</div>
+<div class="text-[10px] text-on-surface-variant uppercase">Click nodos para conectar</div>
+</div>
+</button>
+</div>
+<nav class="flex-1 overflow-y-auto pr-2 mt-2" id="inventory">
+<div class="grid grid-cols-2 gap-2 pb-6" id="inventory-grid"></div>
+</nav>
+</aside>
+<main class="flex-1 relative canvas-grid bg-background overflow-hidden" id="canvas-wrapper">
+<div class="absolute inset-0 overflow-auto" id="canvas">
+<div class="relative min-w-[1600px] min-h-[1200px] zoom-container" id="zoom-layer">
+<svg class="absolute inset-0 w-full h-full pointer-events-none" id="svg-layer">
+<g id="connections-group"></g>
+<path class="drawing-line" d="" id="preview-line" style="visibility: hidden;"></path>
+</svg>
+<div class="relative w-full h-full" id="node-container">
+<!-- Message Icon (Packet) -->
+<div class="absolute w-12 h-12 bg-white border-2 border-primary rounded-lg shadow-2xl flex flex-col items-center justify-center z-50 message-travel opacity-0 scale-0 group cursor-pointer transition-all duration-300" id="message-icon" onclick="openPacketInspector()">
+<span class="material-symbols-outlined text-primary text-[24px]">mail</span>
+<div class="absolute -top-3 left-1/2 -translate-x-1/2 bg-primary text-white text-[8px] font-bold px-2 py-0.5 rounded border border-primary shadow whitespace-nowrap" id="status-tag">CLICK PARA INSPECCIONAR</div>
+<div class="absolute -top-2 -right-2 bg-secondary rounded-full w-5 h-5 flex items-center justify-center border-2 border-white opacity-0 transition-all scale-0" id="secure-badge">
+<span class="material-symbols-outlined text-white text-[10px]" id="badge-icon">lock</span>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- Packet Inspector (Side Panel) -->
+<div class="absolute top-4 right-4 w-72 bg-inverse-surface text-inverse-on-surface rounded-xl shadow-2xl z-[60] packet-inspector translate-x-[120%] opacity-0 border border-white/10" id="packet-inspector">
+<div class="p-4 border-b border-white/10 flex justify-between items-center bg-white/5">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-primary text-sm">visibility</span>
+<h3 class="font-bold text-xs uppercase tracking-wider">Deep Packet Inspector</h3>
+</div>
+<button class="hover:bg-white/10 p-1 rounded" onclick="closePacketInspector()"><span class="material-symbols-outlined text-sm">close</span></button>
+</div>
+<div class="p-4 space-y-4">
+<div>
+<p class="text-[9px] uppercase opacity-50 font-bold mb-2">Metadata del Paquete</p>
+<div class="grid grid-cols-2 gap-2 text-[10px]">
+<div class="bg-white/5 p-2 rounded">
+<span class="block opacity-50">Protocolo</span>
+<span class="font-mono text-primary font-bold" id="inspect-proto">IP/TCP</span>
+</div>
+<div class="bg-white/5 p-2 rounded">
+<span class="block opacity-50">Cifrado</span>
+<span class="font-mono text-secondary font-bold" id="inspect-cipher">AES-256</span>
+</div>
+</div>
+</div>
+<div>
+<p class="text-[9px] uppercase opacity-50 font-bold mb-2">Payload (Contenido)</p>
+<div class="bg-black/40 p-3 rounded-lg font-mono text-[11px] min-h-[100px] break-all text-green-400" id="inspect-payload">
+                        [VACÍO]
+                    </div>
+</div>
+<div class="bg-blue-900/20 border border-blue-500/30 p-2 rounded text-[9px] leading-tight">
+<span class="font-bold block mb-1">Nota del Analista:</span>
+                    En modo HTTPS/E2EE, el contenido es ilegible para atacantes en el camino.
+                </div>
+</div>
+</div>
+<!-- Zoom Controls -->
+<div class="absolute bottom-24 right-8 z-50 flex flex-col gap-2 bg-white/90 backdrop-blur-sm p-1.5 rounded-full shadow-2xl border border-outline-variant">
+<button class="w-10 h-10 rounded-full flex items-center justify-center hover:bg-surface-variant transition-colors text-on-surface" id="zoom-in" title="Zoom In">
+<span class="material-symbols-outlined">add</span>
+</button>
+<button class="w-10 h-10 rounded-full flex items-center justify-center hover:bg-surface-variant transition-colors text-on-surface" id="zoom-out" title="Zoom Out">
+<span class="material-symbols-outlined">remove</span>
+</button>
+<button class="w-10 h-10 rounded-full flex items-center justify-center hover:bg-surface-variant transition-colors text-primary" id="zoom-fit" title="Ajustar">
+<span class="material-symbols-outlined">fullscreen</span>
+</button>
+</div>
+<div class="absolute top-canvas-margin left-canvas-margin w-72 bg-white border border-outline-variant rounded-xl shadow-2xl z-40 p-4 transition-all duration-300 -translate-x-[120%]" id="challenges-panel">
+<div class="flex justify-between items-center mb-4 border-b pb-2">
+<h3 class="font-bold text-on-surface">Escenarios / Retos</h3>
+<button onclick="toggleChallenges()"><span class="material-symbols-outlined text-on-surface-variant">close</span></button>
+</div>
+<div class="space-y-2">
+<div class="p-3 rounded-lg border border-outline-variant hover:bg-surface cursor-pointer scenario-item" onclick="startChallenge('e2ee')">
+<div class="flex items-center gap-2 mb-1">
+<span class="material-symbols-outlined text-primary text-sm">enhanced_encryption</span>
+<span class="font-bold text-[13px]">Ruta Segura E2EE</span>
+</div>
+<p class="text-[11px] text-on-surface-variant">Cifra de extremo a extremo para evitar que Gmail lea tu mensaje.</p>
+</div>
+<div class="p-3 rounded-lg border border-outline-variant hover:bg-surface cursor-pointer scenario-item" onclick="startChallenge('vpn')">
+<div class="flex items-center gap-2 mb-1">
+<span class="material-symbols-outlined text-primary text-sm">vpn_lock</span>
+<span class="font-bold text-[13px]">Privacidad con VPN</span>
+</div>
+<p class="text-[11px] text-on-surface-variant">Oculta tu IP creando un túnel hacia un servidor externo.</p>
+</div>
+<div class="p-3 rounded-lg border border-error/30 bg-error/5 hover:bg-error/10 cursor-pointer scenario-item" onclick="startChallenge('mitm')">
+<div class="flex items-center gap-2 mb-1">
+<span class="material-symbols-outlined text-error text-sm">security_update_warning</span>
+<span class="font-bold text-[13px]">Interceptación ISP</span>
+</div>
+<p class="text-[11px] text-on-surface-variant">Mira cómo un nodo malicioso puede leer datos sin cifrar.</p>
+</div>
+</div>
+</div>
+<div class="absolute top-canvas-margin right-canvas-margin w-64 bg-white/95 backdrop-blur-md border border-outline-variant rounded-xl shadow-2xl z-40 p-4 translate-x-[120%] transition-transform" id="props-panel">
+<div class="flex justify-between items-center mb-4">
+<h3 class="font-bold text-on-surface" id="props-title">Propiedades</h3>
+<button class="text-on-surface-variant" onclick="closeProps()"><span class="material-symbols-outlined">close</span></button>
+</div>
+<div class="space-y-3" id="props-content"></div>
+</div>
+<nav class="fixed bottom-canvas-margin left-1/2 -translate-x-1/2 z-50 flex items-center gap-2 p-2 bg-surface-container/80 backdrop-blur-md rounded-full shadow-lg border border-outline-variant" id="mode-selector">
+<button class="mode-btn flex flex-col items-center justify-center bg-primary text-on-primary rounded-full px-6 py-2 transition-all" data-mode="basico">
+<span class="material-symbols-outlined text-[20px]">horizontal_rule</span>
+<span class="font-label-caps text-[10px] uppercase">Básico</span>
+</button>
+<button class="mode-btn flex flex-col items-center justify-center text-on-surface-variant px-6 py-2 hover:bg-surface-variant rounded-full transition-all" data-mode="https">
+<span class="material-symbols-outlined text-[20px]">lock</span>
+<span class="font-label-caps text-[10px] uppercase">HTTPS</span>
+</button>
+<button class="mode-btn flex flex-col items-center justify-center text-on-surface-variant px-6 py-2 hover:bg-surface-variant rounded-full transition-all" data-mode="e2ee">
+<span class="material-symbols-outlined text-[20px]">enhanced_encryption</span>
+<span class="font-label-caps text-[10px] uppercase">E2EE</span>
+</button>
+<button class="mode-btn flex flex-col items-center justify-center text-on-surface-variant px-6 py-2 hover:bg-surface-variant rounded-full transition-all" data-mode="vpn">
+<span class="material-symbols-outlined text-[20px]">vpn_lock</span>
+<span class="font-label-caps text-[10px] uppercase">VPN</span>
+</button>
+</nav>
+</main>
+<aside class="w-64 bg-surface-container-high border-l border-outline-variant flex flex-col z-40 transition-all duration-300 translate-x-full lg:relative lg:translate-x-0" id="traceroute-sidebar">
+<div class="p-4 border-b border-outline-variant flex justify-between items-center bg-surface">
+<h2 class="font-bold text-on-surface">Technical Log</h2>
+<span class="text-[9px] bg-primary text-on-primary px-2 py-0.5 rounded-full uppercase">Pro</span>
+</div>
+<div class="flex-1 overflow-y-auto p-4 space-y-2 font-mono text-[10px]" id="traceroute-log">
+<div class="text-on-surface-variant italic">Esperando simulación...</div>
+</div>
+</aside>
+</div>
+<script>
+    const inventoryData = [
+        { type: 'person', label: 'Persona 1', icon: 'person', desc: 'Usuario final que inicia la comunicación.' },
+        { type: 'laptop', label: 'Laptop', icon: 'laptop_mac', desc: 'Dispositivo local de procesamiento.' },
+        { type: 'router', label: 'Módem/WiFi', icon: 'router', desc: 'Punto de acceso local.' },
+        { type: 'hub', label: 'Colector', icon: 'hub', desc: 'Agregador de conexiones locales.' },
+        { type: 'tower', label: 'Cableado', icon: 'cell_tower', desc: 'Infraestructura física de transmisión.' },
+        { type: 'dns', label: 'ISP', icon: 'dns', desc: 'Proveedor de Internet. Enruta datos.' },
+        { type: 'cloud', label: 'Gmail', icon: 'cloud', desc: 'Servidor de aplicaciones cloud.' },
+        { type: 'cloud', label: 'Hotmail', icon: 'cloud_done', desc: 'Nodo de servidor secundario.' },
+        { type: 'cell', label: 'Torre Celular', icon: 'tower_control', desc: 'Estación base inalámbrica.' },
+        { type: 'smartphone', label: 'Móvil', icon: 'smartphone', desc: 'Dispositivo receptor móvil.' },
+        { type: 'person', label: 'Persona 2', icon: 'person_search', desc: 'Destinatario final.' },
+        { type: 'vpn', label: 'VPN', icon: 'vpn_lock', desc: 'Túnel cifrado de privacidad.' },
+        { type: 'hacker', label: 'Atacante MitM', icon: 'skull', desc: 'Entidad maliciosa interceptora.' }
+    ];
+
+    const canvas = document.getElementById('canvas');
+    const zoomLayer = document.getElementById('zoom-layer');
+    const nodeContainer = document.getElementById('node-container');
+    const connectionsGroup = document.getElementById('connections-group');
+    const previewLine = document.getElementById('preview-line');
+    const messageIcon = document.getElementById('message-icon');
+    const simulateBtn = document.getElementById('simulateBtn');
+    const resetBtn = document.getElementById('resetBtn');
+    const exportBtn = document.getElementById('exportBtn');
+    const autoAssembleBtn = document.getElementById('autoAssembleBtn');
+    const modeBtns = document.querySelectorAll('.mode-btn');
+    const tracerouteLog = document.getElementById('traceroute-log');
+    const cableTool = document.getElementById('cableTool');
+    const secureBadge = document.getElementById('secure-badge');
+    const badgeIcon = document.getElementById('badge-icon');
+    const inventoryGrid = document.getElementById('inventory-grid');
+    const packetInspector = document.getElementById('packet-inspector');
+
+    let nodes = [];
+    let connections = [];
+    let currentMode = 'basico';
+    let isSimulating = false;
+    let isDrawingCable = false;
+    let drawingStartNode = null;
+    let zoomLevel = 1;
+    const GRID_SIZE = 40;
+
+    const COLORS = { blue: '#0056d2', green: '#006e2f', red: '#ba1a1a', gold: '#fbbf24', purple: '#822800' };
+
+    function createTooltipHTML(label, desc) {
+        return `<div class="edu-tooltip bg-inverse-surface text-inverse-on-surface p-3 rounded-lg shadow-xl border border-white/20">
+            <div class="font-bold text-[12px] mb-1 border-b border-white/10 pb-1">${label}</div>
+            <div class="text-[10px] opacity-90 leading-tight">${desc}</div>
+        </div>`;
+    }
+
+    inventoryData.forEach(item => {
+        const div = document.createElement('div');
+        div.className = 'inventory-item has-tooltip relative flex flex-col items-center justify-center p-3 bg-surface-container-lowest border border-outline-variant rounded-xl cursor-grab hover:bg-surface-variant hover:border-primary transition-all group';
+        div.setAttribute('draggable', 'true');
+        div.innerHTML = `<span class="material-symbols-outlined ${item.type === 'hacker' ? 'text-error' : 'text-primary'} text-[28px] group-hover:scale-110 transition-transform pointer-events-none">${item.icon}</span>
+            <span class="font-label-caps text-[10px] mt-1 text-center pointer-events-none">${item.label}</span>
+            ${createTooltipHTML(item.label, item.desc)}`;
+        div.addEventListener('dragstart', (e) => {
+            e.dataTransfer.setData('type', item.type);
+            e.dataTransfer.setData('label', item.label);
+            e.dataTransfer.setData('icon', item.icon);
+            e.dataTransfer.setData('desc', item.desc);
+        });
+        inventoryGrid.appendChild(div);
+    });
+
+    document.getElementById('zoom-in').onclick = () => { zoomLevel = Math.min(zoomLevel + 0.1, 2); applyZoom(); };
+    document.getElementById('zoom-out').onclick = () => { zoomLevel = Math.max(zoomLevel - 0.1, 0.4); applyZoom(); };
+    document.getElementById('zoom-fit').onclick = () => { zoomLevel = 1; applyZoom(); canvas.scrollTo({ left: 0, top: 0, behavior: 'smooth' }); };
+    function applyZoom() { zoomLayer.style.transform = `scale(${zoomLevel})`; }
+
+    cableTool.onclick = () => {
+        isDrawingCable = !isDrawingCable;
+        cableTool.classList.toggle('bg-primary-fixed', isDrawingCable);
+        if(!isDrawingCable) { previewLine.style.visibility = 'hidden'; drawingStartNode = null; }
+    };
+
+    canvas.addEventListener('mousemove', (e) => {
+        if (!isDrawingCable || !drawingStartNode) return;
+        const rect = zoomLayer.getBoundingClientRect();
+        const startX = drawingStartNode.x + 32;
+        const startY = drawingStartNode.y + 32;
+        const endX = (e.clientX - rect.left) / zoomLevel;
+        const endY = (e.clientY - rect.top) / zoomLevel;
+        previewLine.setAttribute('d', `M ${startX} ${startY} L ${endX} ${endY}`);
+        previewLine.style.visibility = 'visible';
+    });
+
+    canvas.addEventListener('dragover', (e) => e.preventDefault());
+    canvas.addEventListener('drop', (e) => {
+        e.preventDefault();
+        const type = e.dataTransfer.getData('type');
+        const label = e.dataTransfer.getData('label');
+        const icon = e.dataTransfer.getData('icon');
+        const desc = e.dataTransfer.getData('desc');
+        const rect = zoomLayer.getBoundingClientRect();
+        const x = Math.round(((e.clientX - rect.left) / zoomLevel - 32) / GRID_SIZE) * GRID_SIZE;
+        const y = Math.round(((e.clientY - rect.top) / zoomLevel - 32) / GRID_SIZE) * GRID_SIZE;
+        addNode(type, label, icon, x, y, null, desc);
+    });
+
+    function addNode(type, label, icon, x, y, idOverride = null, desc = "") {
+        const id = idOverride || ('node-' + Math.random().toString(36).substr(2, 5));
+        const nodeWrapper = document.createElement('div');
+        nodeWrapper.id = id;
+        nodeWrapper.className = 'node-wrapper has-tooltip absolute flex flex-col items-center gap-2 cursor-pointer z-20 node-enter group';
+        nodeWrapper.style.left = `${x}px`;
+        nodeWrapper.style.top = `${y}px`;
+
+        nodeWrapper.innerHTML = `
+            <div class="node-body w-16 h-16 bg-white border border-outline-variant rounded-xl shadow-sm flex items-center justify-center transition-all group-hover:border-primary group-hover:shadow-lg relative">
+                <span class="material-symbols-outlined text-primary text-[32px]">${icon}</span>
+                <div class="key-container"></div>
+            </div>
+            <span class="font-label-caps text-[10px] text-on-surface-variant uppercase text-center w-24">${label}</span>
+            <button class="absolute -top-2 -right-2 bg-error text-white rounded-full w-5 h-5 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity" onclick="removeNode('${id}', event)">
+                <span class="material-symbols-outlined text-[12px]">close</span>
+            </button>
+            ${createTooltipHTML(label, desc)}
+        `;
+        
+        nodeWrapper.onclick = (e) => {
+            if (isDrawingCable) handleCablePoint(nodes.find(n => n.id === id));
+            else showProps(id, type, label);
+        };
+
+        nodeContainer.appendChild(nodeWrapper);
+        const nodeObj = { id, type, label, icon, x, y };
+        nodes.push(nodeObj);
+        refreshKeys();
+        return nodeObj;
+    }
+
+    function refreshKeys() {
+        nodes.forEach(node => {
+            const el = document.getElementById(node.id);
+            if (!el) return;
+            const container = el.querySelector('.key-container');
+            container.innerHTML = '';
+            if (currentMode === 'https') {
+                if (node.label.includes('Laptop')) addKey(container, COLORS.blue);
+                if (node.label.includes('Gmail')) { addKey(container, COLORS.blue, -8); addKey(container, COLORS.green, 8); }
+            } else if (currentMode === 'e2ee') {
+                if (node.label.includes('Laptop') || node.label.includes('Móvil')) addKey(container, COLORS.gold);
+            }
+        });
+        updateStats();
+    }
+
+    function addKey(container, color, offset = 0) {
+        const key = document.createElement('div');
+        key.className = 'key-badge';
+        key.style.backgroundColor = color;
+        key.style.transform = `translateX(${offset}px)`;
+        key.innerHTML = `<span class="material-symbols-outlined text-white text-[12px]">vpn_key</span>`;
+        container.appendChild(key);
+    }
+
+    function handleCablePoint(node) {
+        if (!drawingStartNode) { drawingStartNode = node; previewLine.style.visibility = 'visible'; }
+        else {
+            if (drawingStartNode.id !== node.id) addConnection(drawingStartNode, node);
+            drawingStartNode = null; previewLine.style.visibility = 'hidden';
+        }
+    }
+
+    function addConnection(start, end) {
+        if (connections.some(c => (c.start.id === start.id && c.end.id === end.id) || (c.start.id === end.id && c.end.id === start.id))) return;
+        connections.push({ start, end });
+        renderConnections();
+    }
+
+    function renderConnections() {
+        connectionsGroup.innerHTML = '';
+        connections.forEach((conn, index) => {
+            const d = `M ${conn.start.x + 32} ${conn.start.y + 32} L ${conn.end.x + 32} ${conn.end.y + 32}`;
+            const line = document.createElementNS("http://www.w3.org/2000/svg", "path");
+            line.setAttribute("d", d);
+            line.setAttribute("class", "connection-line");
+            line.onclick = () => { connections.splice(index, 1); renderConnections(); };
+            connectionsGroup.appendChild(line);
+        });
+    }
+
+    function removeNode(id, e) {
+        if(e) e.stopPropagation();
+        document.getElementById(id)?.remove();
+        nodes = nodes.filter(n => n.id !== id);
+        connections = connections.filter(c => c.start.id !== id && c.end.id !== id);
+        renderConnections();
+    }
+
+    function toggleChallenges() { document.getElementById('challenges-panel').classList.toggle('-translate-x-[120%]'); }
+
+    function startChallenge(id) {
+        const titles = { e2ee: 'Reto: Ruta Segura E2EE', vpn: 'Reto: Privacidad VPN', mitm: 'Reto: Interceptación ISP' };
+        document.getElementById('active-challenge-title').innerText = titles[id];
+        toggleChallenges();
+        autoAssembleBtn.click();
+    }
+
+    function updateStats() {
+        const lat = currentMode === 'vpn' ? '45 ms' : '12 ms';
+        const sec = currentMode === 'e2ee' ? 'EXTREMO' : (currentMode === 'basico' ? 'BAJA' : 'ALTA');
+        document.getElementById('stat-latency').innerText = lat;
+        document.getElementById('stat-security').innerText = sec;
+        document.getElementById('stat-security').style.color = currentMode === 'basico' ? COLORS.red : COLORS.green;
+    }
+
+    function openPacketInspector() {
+        const payload = document.getElementById('inspect-payload');
+        const cipher = document.getElementById('inspect-cipher');
+        const proto = document.getElementById('inspect-proto');
+        
+        if (currentMode === 'basico') {
+            payload.innerText = "Hola Persona 2, este es un mensaje secreto sobre mi nueva contraseña: 12345.";
+            payload.className = "bg-black/40 p-3 rounded-lg font-mono text-[11px] min-h-[100px] break-all text-red-400";
+            cipher.innerText = "NINGUNO";
+            proto.innerText = "HTTP/TCP";
+        } else {
+            const hash = Array.from({length: 128}, () => Math.floor(Math.random()*16).toString(16)).join('');
+            payload.innerText = "0x" + hash.toUpperCase();
+            payload.className = "bg-black/40 p-3 rounded-lg font-mono text-[11px] min-h-[100px] break-all text-green-400";
+            cipher.innerText = "AES-256-GCM";
+            proto.innerText = "HTTPS/TLS 1.3";
+        }
+        
+        packetInspector.classList.remove('translate-x-[120%]', 'opacity-0');
+        packetInspector.classList.add('translate-x-0', 'opacity-100');
+    }
+
+    function closePacketInspector() {
+        packetInspector.classList.add('translate-x-[120%]', 'opacity-0');
+        packetInspector.classList.remove('translate-x-0', 'opacity-100');
+    }
+
+    exportBtn.onclick = () => {
+        const config = { nodes, connections, mode: currentMode };
+        const blob = new Blob([JSON.stringify(config, null, 2)], {type : 'application/json'});
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'lumina-network-config.json';
+        a.click();
+    };
+
+    autoAssembleBtn.onclick = () => {
+        resetBtn.click();
+        const sequence = [
+            { type: 'person', label: 'Persona 1', icon: 'person', x: 40, y: 40 },
+            { type: 'laptop', label: 'Laptop', icon: 'laptop_mac', x: 40, y: 160 },
+            { type: 'router', label: 'Módem/WiFi', icon: 'router', x: 200, y: 160 },
+            { type: 'dns', label: 'ISP', icon: 'dns', x: 400, y: 160 },
+            { type: 'cloud', label: 'Gmail', icon: 'cloud', x: 600, y: 160 },
+            { type: 'smartphone', label: 'Móvil', icon: 'smartphone', x: 800, y: 160 },
+            { type: 'person', label: 'Persona 2', icon: 'person_search', x: 800, y: 40 }
+        ];
+        let prev = null;
+        sequence.forEach((s, idx) => {
+            const n = addNode(s.type, s.label, s.icon, s.x, s.y, `auto-${idx}`, s.desc);
+            if(prev) addConnection(prev, n);
+            prev = n;
+        });
+    };
+
+    modeBtns.forEach(btn => {
+        btn.onclick = () => {
+            currentMode = btn.dataset.mode;
+            modeBtns.forEach(b => { b.classList.remove('bg-primary', 'text-on-primary'); b.classList.add('text-on-surface-variant'); });
+            btn.classList.add('bg-primary', 'text-on-primary');
+            btn.classList.remove('text-on-surface-variant');
+            document.getElementById('canvas-wrapper').className = 'flex-1 relative canvas-grid overflow-hidden ' + (currentMode === 'basico' ? '' : 'mode-' + currentMode);
+            refreshKeys();
+        };
+    });
+
+    simulateBtn.onclick = async () => {
+        if (isSimulating || nodes.length < 2) return;
+        const path = findPath(nodes[0]);
+        
+        // Error Feedback Logic
+        if (path.length < 2 || !path.some(n => n.label.includes('Persona 2') || n.label.includes('Móvil'))) {
+            logMsg("ERROR: Flujo incompleto. Asegúrate de que Persona 1 llegue al destino.", COLORS.red);
+            highlightBrokenPath();
+            return;
+        }
+
+        isSimulating = true;
+        simulateBtn.disabled = true;
+        tracerouteLog.innerHTML = `<div class="text-primary font-bold mb-2">Simulando... [Modo: ${currentMode.toUpperCase()}]</div>`;
+        document.getElementById('stat-delivery').innerText = `0/${path.length-1}`;
+
+        messageIcon.style.left = `${path[0].x + 8}px`;
+        messageIcon.style.top = `${path[0].y + 8}px`;
+        messageIcon.classList.remove('opacity-0', 'scale-0');
+
+        for (let i = 1; i < path.length; i++) {
+            const node = path[i];
+            const prev = path[i-1];
+            
+            updateSecureBadge(currentMode !== 'basico', i % 2 === 0 ? COLORS.blue : COLORS.green);
+            
+            logMsg(`Salto ${i}: ${prev.label} → ${node.label}`, i % 2 === 0 ? COLORS.blue : COLORS.green);
+            document.getElementById('stat-delivery').innerText = `${i}/${path.length-1}`;
+
+            messageIcon.style.left = `${node.x + 8}px`;
+            messageIcon.style.top = `${node.y + 8}px`;
+            await new Promise(r => setTimeout(r, 800));
+        }
+
+        setTimeout(() => {
+            messageIcon.classList.add('opacity-0', 'scale-0');
+            isSimulating = false;
+            simulateBtn.disabled = false;
+            logMsg("Entrega Exitosa.", COLORS.green);
+            closePacketInspector();
+        }, 500);
+    };
+
+    function highlightBrokenPath() {
+        const lines = document.querySelectorAll('.connection-line');
+        lines.forEach(l => {
+            l.classList.add('error');
+            setTimeout(() => l.classList.remove('error'), 2000);
+        });
+    }
+
+    function updateSecureBadge(show, color) {
+        secureBadge.style.opacity = show ? '1' : '0';
+        secureBadge.style.scale = show ? '1' : '0';
+        secureBadge.style.backgroundColor = color;
+    }
+
+    function logMsg(txt, color) {
+        const log = document.createElement('div');
+        log.className = "font-bold my-1 p-1.5 rounded text-[9px] border-l-4";
+        log.style.borderColor = color;
+        log.style.backgroundColor = `${color}15`;
+        log.innerText = txt;
+        tracerouteLog.prepend(log);
+    }
+
+    function findPath(startNode) {
+        const path = [startNode];
+        let current = startNode;
+        let visited = new Set([startNode.id]);
+        while(true) {
+            const connection = connections.find(c => (c.start.id === current.id && !visited.has(c.end.id)) || (c.end.id === current.id && !visited.has(c.start.id)));
+            if (!connection) break;
+            const next = connection.start.id === current.id ? connection.end : connection.start;
+            path.push(next); visited.add(next.id); current = next;
+        }
+        return path;
+    }
+
+    function showProps(id, type, label) {
+        const panel = document.getElementById('props-panel');
+        document.getElementById('props-title').innerText = label;
+        document.getElementById('props-content').innerHTML = `
+            <div class="p-3 bg-surface-container rounded-lg space-y-2">
+                <p class="text-[10px] font-bold text-outline uppercase">Estatus del Nodo</p>
+                <div class="flex items-center gap-2 text-secondary font-bold text-xs">
+                    <span class="w-2 h-2 bg-secondary rounded-full animate-pulse"></span> CONECTADO
+                </div>
+                <div class="text-[10px] opacity-70">IP: 192.168.${Math.floor(Math.random()*255)}.${Math.floor(Math.random()*255)}</div>
+            </div>
+        `;
+        panel.style.transform = 'translateX(0)';
+    }
+
+    function closeProps() { document.getElementById('props-panel').style.transform = 'translateX(120%)'; }
+
+    resetBtn.onclick = () => {
+        nodeContainer.querySelectorAll('.node-wrapper').forEach(n => n.remove());
+        nodes = []; connections = []; renderConnections();
+        tracerouteLog.innerHTML = `<div class="text-on-surface-variant italic">Esperando simulación...</div>`;
+        closeProps(); closePacketInspector();
+        messageIcon.classList.add('opacity-0', 'scale-0');
+        document.getElementById('stat-delivery').innerText = "0/0";
+    };
+</script>
+</body></html>
