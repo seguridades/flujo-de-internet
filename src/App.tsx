@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
+import { toPng } from "html-to-image";
 import {
   User,
   UserCheck,
@@ -24,7 +25,12 @@ import {
   RotateCcw,
   Shuffle,
   Play,
-  Download,
+  ImageDown,
+  HelpCircle,
+  Info,
+  Github,
+  ExternalLink,
+  Globe,
   Search,
   AlertTriangle,
   X,
@@ -67,6 +73,7 @@ interface NetNode {
   label: string;
   x: number;
   y: number;
+  location?: string; // solo VPN: ciudad/país donde está la computadora de confianza
 }
 
 interface Connection {
@@ -101,6 +108,25 @@ const ENDPOINT_TYPES = new Set<NodeType>(["laptop", "smartphone", "cloud-a", "cl
 // Mensaje de ejemplo que viaja en el paquete.
 const PLAINTEXT_MSG = "Hola Mundo, nos vemos a las 5pm. Clave wifi: 12345";
 
+// Proyecto abierto y contacto. El correo se guarda en partes y se arma en
+// tiempo de ejecución para no exponerlo a los rastreadores de spam.
+const GITHUB_URL = "https://github.com/seguridades/flujo-de-internet";
+const MAIL_USER = "info";
+const MAIL_DOMAIN = "seguridades.org";
+const buildFeedbackMail = () => `${MAIL_USER}@${MAIL_DOMAIN}`;
+
+// La VPN es una computadora de confianza ubicada en alguna parte del mundo. Le
+// asignamos una ciudad al azar para reforzar esa idea (tu tráfico sale desde ahí).
+const VPN_LOCATIONS = [
+  "Frankfurt 🇩🇪",
+  "Tokio 🇯🇵",
+  "Toronto 🇨🇦",
+  "Ámsterdam 🇳🇱",
+  "Singapur 🇸🇬",
+  "Estocolmo 🇸🇪",
+];
+const pickVpnLocation = () => VPN_LOCATIONS[Math.floor(Math.random() * VPN_LOCATIONS.length)];
+
 const CANVAS_W = 3000;
 const CANVAS_H = 1100;
 const NODE = 64; // tamaño del nodo (px)
@@ -128,7 +154,7 @@ const INVENTORY: InvItem[] = [
   { type: "cell", label: "Torre Celular", icon: RadioTower, desc: "Estación base inalámbrica." },
   { type: "smartphone", label: "Móvil", icon: Smartphone, desc: "Dispositivo receptor móvil." },
   { type: "person2", label: "Persona 2", icon: UserCheck, desc: "Destinatario final del mensaje." },
-  { type: "vpn", label: "VPN", icon: ShieldCheck, desc: "Túnel cifrado de privacidad." },
+  { type: "vpn", label: "VPN", icon: ShieldCheck, desc: "Computadora de confianza en otra parte del mundo: recibe tu tráfico cifrado y lo reenvía con su propia IP." },
   { type: "hacker", label: "Atacante MitM", icon: Skull, desc: "Entidad maliciosa interceptora.", danger: true },
 ];
 
@@ -175,7 +201,7 @@ function buildSequence(mode: Mode, region: Region): { nodes: NetNode[]; connecti
   ];
   // En modo VPN insertamos el nodo VPN tras el ISP de salida (el túnel
   // cubrirá el tramo Laptop → VPN).
-  if (mode === "vpn") top.splice(6, 0, { type: "vpn", label: "VPN" });
+  if (mode === "vpn") top.splice(6, 0, { type: "vpn", label: "VPN", location: pickVpnLocation() });
 
   // Fila inferior (regreso, derecha → izquierda) - efecto "serpiente"
   const bottom: Array<Omit<NetNode, "id" | "x" | "y">> = [
@@ -290,6 +316,10 @@ export default function App() {
   const [inspectorOpen, setInspectorOpen] = useState(false);
   const [logs, setLogs] = useState<LogEntry[]>([]);
 
+  // Modales informativos: manual de uso y acerca de.
+  const [manualOpen, setManualOpen] = useState(false);
+  const [aboutOpen, setAboutOpen] = useState(false);
+
   // Interceptación MitM: pausa la simulación y muestra lo que ve el atacante.
   const [interception, setInterception] = useState<{ readable: boolean } | null>(null);
   const resumeRef = useRef<(() => void) | null>(null);
@@ -352,7 +382,14 @@ export default function App() {
   // ── Manipulación de nodos ────────────────────────────────────────────────────
   const addNode = useCallback(
     (type: NodeType, label: string, x: number, y: number, id?: string): NetNode => {
-      const node: NetNode = { id: id ?? `n-${uid()}`, type, label, x, y };
+      const node: NetNode = {
+        id: id ?? `n-${uid()}`,
+        type,
+        label,
+        x,
+        y,
+        ...(type === "vpn" ? { location: pickVpnLocation() } : {}),
+      };
       setNodes((prev) => [...prev, node]);
       return node;
     },
@@ -498,6 +535,29 @@ export default function App() {
     setDelivered({ done: 0, total: 0 });
   }, [mode, simulating, getRegion]);
 
+  // ── Cambio de modo ───────────────────────────────────────────────────────────
+  // El nodo VPN forma parte de la topología SOLO en modo VPN. Si el lienzo tiene
+  // un flujo auto-armado, lo recompone al entrar o salir de VPN para que el nodo
+  // VPN aparezca o desaparezca. Los flujos cableados a mano se respetan.
+  const changeMode = useCallback(
+    (next: Mode) => {
+      setMode(next);
+      if (simulating) return;
+      const isAuto = nodes.length > 0 && nodes.every((n) => n.id.startsWith("auto-"));
+      const hasVpn = nodes.some((n) => n.type === "vpn");
+      if (isAuto && (next === "vpn") !== hasVpn) {
+        const { nodes: ns, connections: cs } = buildSequence(next, getRegion());
+        setNodes(ns);
+        setConnections(cs);
+        setLogs([]);
+        setActiveEdge(null);
+        setPacketVisible(false);
+        setDelivered({ done: 0, total: 0 });
+      }
+    },
+    [nodes, simulating, getRegion]
+  );
+
   // ── Modo Taller: reparte los nodos del flujo inicial DESORDENADOS ────────────
   // Coloca los 13 nodos del flujo completo en posiciones aleatorias y SIN
   // conexiones, para que los participantes los acomoden y cableen ellos mismos.
@@ -587,17 +647,24 @@ export default function App() {
     setDelivered({ done: 0, total: 0 });
   }, []);
 
-  // ── Exportar configuración (JSON) ─────────────────────────────────────────────
-  const exportJSON = useCallback(() => {
-    const data = JSON.stringify({ nodes, connections, mode }, null, 2);
-    const blob = new Blob([data], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "lumina-network-config.json";
-    a.click();
-    URL.revokeObjectURL(url);
-  }, [nodes, connections, mode]);
+  // ── Exportar el lienzo como imagen (PNG) ──────────────────────────────────────
+  const exportPNG = useCallback(async () => {
+    const el = canvasRef.current;
+    if (!el) return;
+    try {
+      const dataUrl = await toPng(el, {
+        backgroundColor: "#ffffff",
+        pixelRatio: 2,
+        cacheBust: true,
+      });
+      const a = document.createElement("a");
+      a.href = dataUrl;
+      a.download = "flujo-internet.png";
+      a.click();
+    } catch (err) {
+      console.error("No se pudo exportar la imagen:", err);
+    }
+  }, []);
 
   // Reanuda la simulación tras una interceptación.
   const resumeSim = useCallback(() => {
@@ -895,8 +962,14 @@ export default function App() {
         </div>
 
         <div className="flex items-center gap-2">
-          <IconBtn title="Exportar JSON" onClick={exportJSON}>
-            <Download size={18} />
+          <IconBtn title="Manual de uso" onClick={() => setManualOpen(true)}>
+            <HelpCircle size={18} />
+          </IconBtn>
+          <IconBtn title="Acerca de" onClick={() => setAboutOpen(true)}>
+            <Info size={18} />
+          </IconBtn>
+          <IconBtn title="Exportar como imagen (PNG)" onClick={exportPNG}>
+            <ImageDown size={18} />
           </IconBtn>
           <button
             onClick={scatterNodes}
@@ -1216,10 +1289,10 @@ export default function App() {
 
           {/* Selector de modos */}
           <nav className="absolute bottom-6 left-1/2 z-40 flex -translate-x-1/2 items-center gap-1 rounded-full border border-outline-variant bg-white/80 p-1.5 shadow-lg backdrop-blur">
-            <ModeBtn current={mode} value="basico" onClick={setMode} icon={Mail} label="Básico" />
-            <ModeBtn current={mode} value="https" onClick={setMode} icon={Lock} label="HTTPS" />
-            <ModeBtn current={mode} value="e2ee" onClick={setMode} icon={ShieldCheck} label="E2EE" />
-            <ModeBtn current={mode} value="vpn" onClick={setMode} icon={ShieldCheck} label="VPN" />
+            <ModeBtn current={mode} value="basico" onClick={changeMode} icon={Mail} label="Básico" />
+            <ModeBtn current={mode} value="https" onClick={changeMode} icon={Lock} label="HTTPS" />
+            <ModeBtn current={mode} value="e2ee" onClick={changeMode} icon={ShieldCheck} label="E2EE" />
+            <ModeBtn current={mode} value="vpn" onClick={changeMode} icon={ShieldCheck} label="VPN" />
           </nav>
 
           {/* Inspector DPI */}
@@ -1252,6 +1325,16 @@ export default function App() {
                 onContinue={resumeSim}
               />
             )}
+          </AnimatePresence>
+
+          {/* Manual de uso */}
+          <AnimatePresence>
+            {manualOpen && <ManualModal onClose={() => setManualOpen(false)} />}
+          </AnimatePresence>
+
+          {/* Acerca de */}
+          <AnimatePresence>
+            {aboutOpen && <AboutModal onClose={() => setAboutOpen(false)} />}
           </AnimatePresence>
         </main>
 
@@ -1464,8 +1547,19 @@ function NodeCard({
   const danger = node.type === "hacker";
   const desc = DESC_BY_TYPE[node.type];
 
+  // El tooltip sale hacia arriba por defecto, pero si el card está pegado al
+  // tope (donde lo taparía el header) lo volteamos hacia abajo. Se mide al
+  // entrar el cursor para cubrir también el caso con scroll.
+  const cardRef = useRef<HTMLDivElement>(null);
+  const [tipBelow, setTipBelow] = useState(false);
+  const onEnter = () => {
+    const top = cardRef.current?.getBoundingClientRect().top ?? 999;
+    setTipBelow(top < 170);
+  };
+
   return (
     <motion.div
+      ref={cardRef}
       initial={{ scale: 0.5, opacity: 0 }}
       animate={{ scale: 1, opacity: 1 }}
       transition={{ type: "spring", stiffness: 400, damping: 22 }}
@@ -1473,14 +1567,23 @@ function NodeCard({
       className="group absolute z-20 flex flex-col items-center gap-1.5"
       style={{ left: node.x, top: node.y, cursor: "grab" }}
       onPointerDown={onPointerDown}
+      onMouseEnter={onEnter}
     >
-      {/* Tooltip descriptivo (al pasar el mouse) */}
-      <div className="pointer-events-none absolute bottom-full left-1/2 z-50 mb-2 w-48 -translate-x-1/2 scale-95 rounded-lg border border-white/10 bg-inverse-surface p-2.5 text-inverse-on-surface opacity-0 shadow-xl transition-all duration-150 group-hover:scale-100 group-hover:opacity-100">
+      {/* Tooltip descriptivo (al pasar el mouse); se voltea si no hay espacio arriba */}
+      <div
+        className={`pointer-events-none absolute left-1/2 z-50 w-48 -translate-x-1/2 scale-95 rounded-lg border border-white/10 bg-inverse-surface p-2.5 text-inverse-on-surface opacity-0 shadow-xl transition-all duration-150 group-hover:scale-100 group-hover:opacity-100 ${
+          tipBelow ? "top-full mt-2" : "bottom-full mb-2"
+        }`}
+      >
         <div className="mb-0.5 border-b border-white/10 pb-1 text-[11px] font-bold">
           {node.label}
         </div>
         <div className="text-[10px] leading-snug opacity-90">{desc}</div>
-        <div className="absolute left-1/2 top-full h-2 w-2 -translate-x-1/2 -translate-y-1 rotate-45 bg-inverse-surface" />
+        <div
+          className={`absolute left-1/2 h-2 w-2 -translate-x-1/2 rotate-45 bg-inverse-surface ${
+            tipBelow ? "bottom-full translate-y-1" : "top-full -translate-y-1"
+          }`}
+        />
       </div>
 
       <div
@@ -1532,6 +1635,11 @@ function NodeCard({
       <span className="w-24 text-center text-[10px] font-bold uppercase tracking-wide text-on-surface-variant">
         {node.label}
       </span>
+      {node.location && (
+        <span className="-mt-0.5 flex items-center gap-1 rounded-full bg-primary-container/10 px-2 py-0.5 text-[9px] font-semibold text-primary">
+          <Globe size={10} /> {node.location}
+        </span>
+      )}
     </motion.div>
   );
 }
@@ -1670,6 +1778,143 @@ function KeyExplainModal({
         </div>
       </motion.div>
     </motion.div>
+  );
+}
+
+// Contenedor reutilizable para los modales informativos (manual / acerca de).
+function InfoModal({
+  title,
+  icon: Icon,
+  onClose,
+  children,
+}: {
+  title: string;
+  icon: LucideIcon;
+  onClose: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      onClick={onClose}
+      className="absolute inset-0 z-[80] flex items-center justify-center bg-black/40 p-6 backdrop-blur-sm"
+    >
+      <motion.div
+        initial={{ scale: 0.9, y: 10 }}
+        animate={{ scale: 1, y: 0 }}
+        exit={{ scale: 0.9, opacity: 0 }}
+        transition={{ type: "spring", stiffness: 320, damping: 26 }}
+        onClick={(e) => e.stopPropagation()}
+        className="flex max-h-[85vh] w-[30rem] max-w-full flex-col overflow-hidden rounded-2xl bg-white shadow-2xl"
+      >
+        <div className="flex items-center justify-between gap-3 bg-primary-container px-5 py-4 text-white">
+          <div className="flex items-center gap-3">
+            <Icon size={22} />
+            <h3 className="text-sm font-bold uppercase tracking-wider">{title}</h3>
+          </div>
+          <button
+            onClick={onClose}
+            className="rounded-full p-1 transition hover:bg-white/20"
+            title="Cerrar"
+          >
+            <X size={18} />
+          </button>
+        </div>
+        <div className="overflow-y-auto p-5">{children}</div>
+      </motion.div>
+    </motion.div>
+  );
+}
+
+function ManualModal({ onClose }: { onClose: () => void }) {
+  const steps: Array<{ title: string; text: string }> = [
+    {
+      title: "Arma el flujo",
+      text: "Arrastra piezas del panel izquierdo al lienzo, o pulsa Auto-Armado para generar el flujo completo de una vez.",
+    },
+    {
+      title: "Conecta los nodos",
+      text: "Arrastra desde el puerto de un nodo hasta otro para crear el cable que los une.",
+    },
+    {
+      title: "Agrega un atacante",
+      text: "Suelta la pieza Atacante MitM dentro del camino para ver qué puede leer cuando el mensaje pasa por ahí.",
+    },
+    {
+      title: "Elige un modo",
+      text: "Abajo cambia entre Básico, HTTPS, E2EE y VPN. Cada modo cambia cómo viaja y se cifra el mensaje.",
+    },
+    {
+      title: "Simula",
+      text: "Pulsa Simular y sigue la narración paso a paso. En cada pausa usa Continuar (o las teclas Enter / Espacio).",
+    },
+    {
+      title: "Modo taller",
+      text: "Desordenar reparte las piezas sin conexiones para que el grupo arme el flujo por su cuenta.",
+    },
+    {
+      title: "Exporta la imagen",
+      text: "El botón de imagen (PNG) descarga una captura del lienzo tal como está.",
+    },
+  ];
+  return (
+    <InfoModal title="Manual de uso" icon={HelpCircle} onClose={onClose}>
+      <ol className="space-y-3">
+        {steps.map((s, i) => (
+          <li key={i} className="flex gap-3">
+            <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary-container text-[12px] font-bold text-white">
+              {i + 1}
+            </span>
+            <div>
+              <p className="text-[13px] font-bold text-on-surface">{s.title}</p>
+              <p className="text-[12px] leading-relaxed text-on-surface-variant">{s.text}</p>
+            </div>
+          </li>
+        ))}
+      </ol>
+    </InfoModal>
+  );
+}
+
+function AboutModal({ onClose }: { onClose: () => void }) {
+  const mail = buildFeedbackMail();
+  return (
+    <InfoModal title="Acerca de" icon={Info} onClose={onClose}>
+      <div className="space-y-4">
+        <p className="text-[13px] leading-relaxed text-on-surface">
+          Simulador educativo del flujo de internet, hecho para{" "}
+          <span className="font-bold">talleres en línea</span> de seguridad: muestra cómo
+          viaja un mensaje y qué protege cada modo de cifrado.
+        </p>
+        <p className="text-[13px] leading-relaxed text-on-surface">
+          Es un proyecto de <span className="font-bold">código abierto</span>. Puedes ver el
+          código, reportar problemas o contribuir en GitHub.
+        </p>
+        <a
+          href={GITHUB_URL}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex items-center justify-center gap-2 rounded-full bg-primary-container py-2.5 font-bold text-white transition hover:brightness-110"
+        >
+          <Github size={18} /> Ver en GitHub <ExternalLink size={14} />
+        </a>
+        <div className="rounded-lg border border-outline-variant bg-surface-variant/40 p-3">
+          <p className="text-[12px] text-on-surface-variant">
+            ¿Comentarios o sugerencias? Escríbenos a{" "}
+            <a
+              href={`mailto:${mail}`}
+              className="font-bold text-primary hover:underline"
+            >
+              {MAIL_USER}
+              <span aria-hidden="true">&#64;</span>
+              {MAIL_DOMAIN}
+            </a>
+          </p>
+        </div>
+      </div>
+    </InfoModal>
   );
 }
 

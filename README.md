@@ -4,20 +4,27 @@ Simulador interactivo y educativo para visualizar cómo viaja un paquete de dato
 por internet y cómo lo protegen (o no) los distintos mecanismos de seguridad:
 HTTP básico, HTTPS, cifrado de extremo a extremo (E2EE) y VPN.
 
-Está pensado para talleres: los participantes arrastran nodos (Persona, Laptop,
-Módem, ISP, nubes, VPN, etc.) a un lienzo, los conectan y observan el recorrido
-del paquete, con explicaciones paso a paso de qué puede leer cada actor del camino.
+**Pruébalo en línea: [https://flujo.seguridades.org/](https://flujo.seguridades.org/)**
+
+Está pensado para talleres en línea: los participantes arrastran nodos (Persona,
+Laptop, Módem, ISP, nubes, VPN, etc.) a un lienzo, los conectan y observan el
+recorrido del paquete, con explicaciones paso a paso de qué puede leer cada actor
+del camino. Es un proyecto de código abierto.
 
 ## Características
 
 - Lienzo con zoom, scroll y arrastrar/soltar de nodos.
 - Inventario de nodos y herramientas; conexiones por arrastre y borrado por click.
-- Escenarios listos: Flujo simple, VPN a varios servicios y lienzo vacío
-  (interactivo), más un modo "Desordenar" para talleres.
+- **Auto-Armado**: genera el flujo completo de un click; **Desordenar** reparte
+  las piezas sin conectar para que el grupo arme el flujo (modo taller).
 - Cuatro modos de seguridad con visualización dedicada (llaves, arcos de cifrado,
-  túnel VPN) y narración didáctica.
+  túnel VPN) y narración didáctica en HTTPS y E2EE.
+- La VPN se representa como una computadora de confianza ubicada en alguna parte
+  del mundo (ciudad y país visibles en el nodo).
 - Simulación animada del paquete con telemetría (latencia, seguridad, paquetes),
   inspector DPI, interceptación MitM y log técnico.
+- Exportar el lienzo como imagen PNG, manual de uso y sección "Acerca de"
+  integrados.
 
 ## Stack
 
@@ -25,6 +32,7 @@ del paquete, con explicaciones paso a paso de qué puede leer cada actor del cam
 - Tailwind CSS
 - Framer Motion (animaciones)
 - Lucide React (iconos)
+- html-to-image (exportar PNG)
 
 ## Requisitos
 
@@ -44,19 +52,26 @@ Abre la URL que imprime Vite (por defecto http://localhost:5173).
 
 ## Uso rápido
 
-1. Elige un escenario en el menú **Escenarios**, o arma el flujo arrastrando nodos.
+1. Pulsa **Auto-Armado** para generar el flujo completo, o arma el tuyo
+   arrastrando nodos del panel izquierdo al lienzo.
 2. Para conectar nodos, arrastra desde el punto azul de uno hasta otro. Click en
    un cable para borrarlo.
-3. Selecciona el modo (Básico / HTTPS / E2EE / VPN) en la barra inferior.
-4. Pulsa **Enviar** y avanza con **Continuar** (o Enter / Espacio) en las pausas.
-5. Haz click en un servicio para enviar solo a ese destino; sin selección, se
-   recorren todos.
+3. Agrega un **Atacante MitM** dentro del camino para ver qué puede leer.
+4. Selecciona el modo (Básico / HTTPS / E2EE / VPN) en la barra inferior.
+5. Pulsa **Enviar** y avanza con **Continuar** (o Enter / Espacio) en las pausas.
+
+El botón de imagen exporta el lienzo a PNG, y los iconos de ayuda e información
+abren el manual de uso y la sección "Acerca de".
 
 ## Estructura
 
-- `src/App.tsx` — toda la lógica de estado y los componentes principales.
-- `src/main.tsx`, `src/index.css` — punto de entrada y estilos base.
+- `src/App.tsx`: toda la lógica de estado y los componentes principales.
+- `src/main.tsx`, `src/index.css`: punto de entrada y estilos base.
+
+## Contacto
+
+¿Comentarios o sugerencias? Escríbenos a `info` arroba `seguridades.org`.
 
 ## Estado
 
-Proyecto en desarrollo. Ver [CHANGELOG.md](./CHANGELOG.md) para el detalle de versiones.
+Proyecto en desarrollo.
