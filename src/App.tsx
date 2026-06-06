@@ -14,9 +14,6 @@ import {
   Smartphone,
   ShieldCheck,
   Skull,
-  Youtube,
-  Landmark,
-  ChevronDown,
   Mail,
   Lock,
   KeyRound,
@@ -62,8 +59,6 @@ type NodeType =
   | "smartphone"
   | "person2"
   | "vpn"
-  | "youtube"
-  | "gov"
   | "hacker";
 
 interface NetNode {
@@ -72,7 +67,6 @@ interface NetNode {
   label: string;
   x: number;
   y: number;
-  country?: string; // etiqueta de país (ej. servidor VPN en el extranjero)
 }
 
 interface Connection {
@@ -102,24 +96,7 @@ const LEG_COLORS = ["#0056d2", "#16a34a", "#f59e0b", "#7c3aed", "#db2777", "#089
 
 // Extremos de cifrado en HTTPS: dispositivos y servidores (nubes). La
 // infraestructura intermedia (módem, ISP, torres) solo transporta bytes.
-const ENDPOINT_TYPES = new Set<NodeType>([
-  "laptop",
-  "smartphone",
-  "cloud-a",
-  "cloud-b",
-  "youtube",
-  "gov",
-]);
-
-// Tipos que pueden ser destino final de un envío.
-const DEST_TYPES = new Set<NodeType>([
-  "person2",
-  "smartphone",
-  "cloud-a",
-  "cloud-b",
-  "youtube",
-  "gov",
-]);
+const ENDPOINT_TYPES = new Set<NodeType>(["laptop", "smartphone", "cloud-a", "cloud-b"]);
 
 // Mensaje de ejemplo que viaja en el paquete.
 const PLAINTEXT_MSG = "Hola Mundo, nos vemos a las 5pm. Clave wifi: 12345";
@@ -152,8 +129,6 @@ const INVENTORY: InvItem[] = [
   { type: "smartphone", label: "Móvil", icon: Smartphone, desc: "Dispositivo receptor móvil." },
   { type: "person2", label: "Persona 2", icon: UserCheck, desc: "Destinatario final del mensaje." },
   { type: "vpn", label: "VPN", icon: ShieldCheck, desc: "Túnel cifrado de privacidad." },
-  { type: "youtube", label: "YouTube", icon: Youtube, desc: "Servicio de video en internet." },
-  { type: "gov", label: "Portal Gob", icon: Landmark, desc: "Portal de gobierno / trámites." },
   { type: "hacker", label: "Atacante MitM", icon: Skull, desc: "Entidad maliciosa interceptora.", danger: true },
 ];
 
@@ -239,63 +214,19 @@ function buildSequence(mode: Mode, region: Region): { nodes: NetNode[]; connecti
 // ── Helpers geométricos ───────────────────────────────────────────────────────
 const center = (n: NetNode) => ({ x: n.x + NODE / 2, y: n.y + NODE / 2 });
 
-// Elige el nodo de origen: Persona 1 si existe; si no, un extremo (un solo
-// cable); si no, el primer nodo. Así no depende del orden de creación.
-function pickStart(nodes: NetNode[], connections: Connection[]): NetNode | null {
-  if (nodes.length === 0) return null;
-  const degree = (id: string) =>
-    connections.filter((c) => c.from === id || c.to === id).length;
-  return (
-    nodes.find((n) => n.type === "person") ??
-    nodes.find((n) => degree(n.id) === 1) ??
-    nodes[0]
-  );
-}
-
-// Ruta más corta (BFS) entre dos nodos; null si no hay camino. Soporta
-// topologías ramificadas (un nodo con varias salidas).
-function bfsPath(
-  nodes: NetNode[],
-  connections: Connection[],
-  fromId: string,
-  toId: string
-): NetNode[] | null {
-  const adj = new Map<string, string[]>();
-  nodes.forEach((n) => adj.set(n.id, []));
-  connections.forEach((c) => {
-    adj.get(c.from)?.push(c.to);
-    adj.get(c.to)?.push(c.from);
-  });
-  const byId = new Map(nodes.map((n) => [n.id, n]));
-  const prev = new Map<string, string | null>();
-  prev.set(fromId, null);
-  const queue = [fromId];
-  while (queue.length) {
-    const cur = queue.shift()!;
-    if (cur === toId) break;
-    for (const nb of adj.get(cur) ?? []) {
-      if (!prev.has(nb)) {
-        prev.set(nb, cur);
-        queue.push(nb);
-      }
-    }
-  }
-  if (!prev.has(toId)) return null;
-  const path: NetNode[] = [];
-  let c: string | null = toId;
-  while (c != null) {
-    const n = byId.get(c);
-    if (n) path.unshift(n);
-    c = prev.get(c) ?? null;
-  }
-  return path;
-}
-
-// Recorre la cadena lineal de conexiones desde el origen (sin ramas).
+// Recorre la cadena lineal de conexiones desde el primer nodo.
 function findPath(nodes: NetNode[], connections: Connection[]): NetNode[] {
   if (nodes.length === 0) return [];
   const byId = new Map(nodes.map((n) => [n.id, n]));
-  const start = pickStart(nodes, connections)!;
+
+  // El origen es Persona 1 si existe; si no, un extremo (un solo cable); si no,
+  // el primer nodo. Así el recorrido no depende del orden en que se agregaron.
+  const degree = (id: string) =>
+    connections.filter((c) => c.from === id || c.to === id).length;
+  const start =
+    nodes.find((n) => n.type === "person") ??
+    nodes.find((n) => degree(n.id) === 1) ??
+    nodes[0];
   const path: NetNode[] = [start];
   const visited = new Set([start.id]);
   let current = start;
@@ -339,10 +270,6 @@ export default function App() {
   const [connections, setConnections] = useState<Connection[]>([]);
   const [mode, setMode] = useState<Mode>("basico");
   const [zoom, setZoom] = useState(1);
-
-  // Destino elegido (click en un servicio) y menú de escenarios.
-  const [selectedTarget, setSelectedTarget] = useState<string | null>(null);
-  const [scenarioOpen, setScenarioOpen] = useState(false);
 
   // Conexión por arrastre desde el puerto del nodo.
   const [linking, setLinking] = useState<string | null>(null); // id del nodo origen
@@ -568,51 +495,8 @@ export default function App() {
     setLogs([]);
     setActiveEdge(null);
     setPacketVisible(false);
-    setSelectedTarget(null);
     setDelivered({ done: 0, total: 0 });
   }, [mode, simulating, getRegion]);
-
-  // ── Escenario: VPN a varios servicios (topología ramificada) ─────────────────
-  // Persona -> Laptop -> Módem -> ISP -> VPN (en otro país) -> {YouTube, Gmail,
-  // Portal Gob}. Pone el modo en VPN. Los servicios son destinos; al simular se
-  // recorren todos, o solo el que el usuario seleccione con click.
-  const buildMultiService = useCallback(() => {
-    if (simulating) return;
-    const r = getRegion();
-    const padL = 70;
-    const cols = 6; // 5 del tronco + 1 columna de servicios
-    const colGap = (Math.max(NODE, r.w - padL - 60) - NODE) / (cols - 1);
-    const xAt = (c: number) => r.x + padL + c * colGap;
-    const midY = r.y + r.h / 2 - NODE / 2;
-
-    const trunk: NetNode[] = [
-      { id: "ms-p1", type: "person", label: "Persona 1", x: xAt(0), y: midY },
-      { id: "ms-lap", type: "laptop", label: "Laptop", x: xAt(1), y: midY },
-      { id: "ms-mod", type: "router", label: "Módem/WiFi", x: xAt(2), y: midY },
-      { id: "ms-isp", type: "isp", label: "ISP", x: xAt(3), y: midY },
-      { id: "ms-vpn", type: "vpn", label: "VPN", x: xAt(4), y: midY, country: "Frankfurt 🇩🇪" },
-    ];
-
-    const services: NetNode[] = [
-      { id: "ms-yt", type: "youtube", label: "YouTube", x: xAt(5), y: midY - 180 },
-      { id: "ms-gm", type: "cloud-a", label: "Gmail", x: xAt(5), y: midY },
-      { id: "ms-gov", type: "gov", label: "Portal Gob", x: xAt(5), y: midY + 180 },
-    ];
-
-    const ns = [...trunk, ...services];
-    const cs: Connection[] = [];
-    for (let i = 0; i < trunk.length - 1; i++) cs.push({ from: trunk[i].id, to: trunk[i + 1].id });
-    services.forEach((s) => cs.push({ from: "ms-vpn", to: s.id }));
-
-    setNodes(ns);
-    setConnections(cs);
-    setMode("vpn");
-    setLogs([]);
-    setActiveEdge(null);
-    setPacketVisible(false);
-    setSelectedTarget(null);
-    setDelivered({ done: 0, total: 0 });
-  }, [simulating, getRegion]);
 
   // ── Modo Taller: reparte los nodos del flujo inicial DESORDENADOS ────────────
   // Coloca los 13 nodos del flujo completo en posiciones aleatorias y SIN
@@ -681,7 +565,6 @@ export default function App() {
     setLogs([]);
     setActiveEdge(null);
     setPacketVisible(false);
-    setSelectedTarget(null);
     setDelivered({ done: 0, total: 0 });
   }, [simulating, getRegion]);
 
@@ -697,7 +580,6 @@ export default function App() {
     setErrorFlash(false);
     setKeyExplain(null);
     setActiveLeg(null);
-    setSelectedTarget(null);
     simRunRef.current++; // invalida cualquier simulación en curso
     resumeRef.current?.();
     resumeRef.current = null;
@@ -725,38 +607,21 @@ export default function App() {
     resumeRef.current = null;
   }, []);
 
-  // ── Simulación (soporta destinos múltiples / ramificación) ───────────────────
+  // ── Simulación ────────────────────────────────────────────────────────────────
   const simulate = useCallback(async () => {
     if (simulating) return;
-    const origin = pickStart(nodes, connections);
-    if (!origin) return;
+    const path = findPath(nodes, connections);
 
-    // Destinos: el seleccionado (si es válido) o los destinos FINALES (nodos
-    // hoja, con un solo cable). Así las nubes intermedias de un flujo lineal NO
-    // se tratan como destino; sí los servicios en abanico (cada uno es hoja).
-    const degree = (id: string) =>
-      connections.filter((c) => c.from === id || c.to === id).length;
-    let destNodes: NetNode[];
-    const sel = selectedTarget ? nodes.find((n) => n.id === selectedTarget) : null;
-    if (sel && sel.id !== origin.id) {
-      destNodes = [sel];
-    } else {
-      destNodes = nodes.filter(
-        (n) => n.id !== origin.id && DEST_TYPES.has(n.type) && degree(n.id) === 1
+    // Validación: cadena continua que llega a un destino.
+    const reachesDest = path.some((n) =>
+      ["person2", "smartphone", "cloud-a", "cloud-b"].includes(n.type)
+    );
+    if (path.length < 2 || !reachesDest) {
+      addLog(
+        "ERROR: flujo incompleto. Conecta Persona 1 hasta un destino válido.",
+        COLORS.red,
+        0
       );
-      // Respaldo: si no hay hojas válidas, usa cualquier destino alcanzable.
-      if (destNodes.length === 0) {
-        destNodes = nodes.filter((n) => n.id !== origin.id && DEST_TYPES.has(n.type));
-      }
-    }
-
-    // Rutas BFS desde el origen a cada destino alcanzable.
-    const paths = destNodes
-      .map((d) => bfsPath(nodes, connections, origin.id, d.id))
-      .filter((p): p is NetNode[] => !!p && p.length >= 2);
-
-    if (paths.length === 0) {
-      addLog("ERROR: flujo incompleto. Conecta el origen hasta un destino válido.", COLORS.red, 0);
       setErrorFlash(true);
       setTimeout(() => setErrorFlash(false), 1200);
       return;
@@ -764,123 +629,143 @@ export default function App() {
 
     const runId = ++simRunRef.current;
     const cancelled = () => simRunRef.current !== runId;
-    const pause = () => new Promise<void>((resolve) => { resumeRef.current = resolve; });
-    const pauseModals = paths.length === 1; // narración rica solo en envío único
-    const move = (n: NetNode) => {
-      const c = center(n);
-      setPacketPos({ x: c.x - PACKET / 2, y: c.y - PACKET / 2 });
-    };
 
     setSimulating(true);
     setInspectorOpen(false);
     setErrorFlash(false);
     setActiveLeg(null);
     setLogs([]);
-    setDelivered({ done: 0, total: paths.length });
+    setDelivered({ done: 0, total: path.length - 1 });
     addLog(`Iniciando simulación - Modo ${meta.label.toUpperCase()}`, COLORS.primary, 0);
+
+    // Extremos de cifrado a lo largo del camino (para la narración en HTTPS).
+    const tlsOrder = path.map((n, i) => (ENDPOINT_TYPES.has(n.type) ? i : -1)).filter((i) => i >= 0);
+
+    // Dispositivos de origen y destino (para la narración E2EE).
+    const e2eeDevices = path.filter((n) => n.type === "laptop" || n.type === "smartphone");
+    const originDevId = e2eeDevices[0]?.id;
+    const destDev = e2eeDevices[e2eeDevices.length - 1];
+
     if (mode === "e2ee") {
       addLog("Cifrado de extremo a extremo: solo el origen y el destino tienen la llave.", COLORS.amber, 0);
     } else if (mode === "vpn") {
       addLog("Túnel VPN activo: el tráfico viaja encapsulado y cifrado.", COLORS.purple, 0);
     }
 
-    // Narración por nodo (usa el camino actual para el contexto).
-    const narrateNode = async (path: NetNode[], i: number, t: number) => {
-      const node = path[i];
-      const isServer = ["cloud-a", "cloud-b", "youtube", "gov"].includes(node.type);
+    const first = center(path[0]);
+    setPacketPos({ x: first.x - PACKET / 2, y: first.y - PACKET / 2 });
+    setPacketVisible(true);
+    await wait(250);
+    if (cancelled()) return;
 
-      // HTTPS: cifrado tramo por tramo; los servidores leen.
+    let t = 0;
+    for (let i = 1; i < path.length; i++) {
+      const node = path[i];
+      const prev = path[i - 1];
+      setKeyExplain(null); // limpia la explicación del paso anterior
+      setActiveEdge([prev.id, node.id]);
+      const c = center(node);
+      setPacketPos({ x: c.x - PACKET / 2, y: c.y - PACKET / 2 });
+
+      const hop = meta.latency / (path.length - 1) + Math.random() * 3;
+      t += hop;
+      const color = i % 2 === 0 ? COLORS.blue : COLORS.green;
+      addLog(`Paquete recibido en ${node.label} - Procesando...`, color, +t.toFixed(1));
+      setDelivered({ done: i, total: path.length - 1 });
+
+      await wait(HOP_MS);
+      if (cancelled()) return;
+
+      // Narración HTTPS: el cifrado es tramo por tramo, los servidores leen.
+      // Pausa con un modal hasta que el usuario pulse Continuar.
       if (mode === "https" && ENDPOINT_TYPES.has(node.type)) {
-        const tlsOrder = path.map((n, k) => (ENDPOINT_TYPES.has(n.type) ? k : -1)).filter((k) => k >= 0);
         const order = tlsOrder.indexOf(i);
         const nextI = tlsOrder[order + 1];
         const next = nextI != null ? path[nextI] : null;
-        let title = "", text = "", expColor = LEG_COLORS[order % LEG_COLORS.length];
-        let readable = false, reencrypts = false;
+        const isCloud = node.type === "cloud-a" || node.type === "cloud-b";
+
+        let title = "";
+        let text = "";
+        let expColor = LEG_COLORS[order % LEG_COLORS.length];
+        let readable = false;
+        let reencrypts = false;
+
         if (order === 0) {
+          // Origen: cifra y lo manda a la red (en la red ya no se puede leer).
           title = "Aquí inicia la llave segura";
           text = `${node.label} cifra el mensaje. Desde aquí viaja cifrado hasta ${next?.label ?? "el siguiente nodo"}, ilegible en la red.`;
-        } else if (isServer && next) {
+          readable = false;
+        } else if (isCloud) {
+          // Nube intermedia: descifra, lee y vuelve a cifrar para reenviar.
           title = `Aquí ${node.label} abre la llave`;
-          text = `Tiene la llave: descifra el contenido y puede leerlo. Luego lo vuelve a cifrar con una nueva llave hacia ${next.label}.`;
-          expColor = COLORS.amber; readable = true; reencrypts = true;
-          addLog(`${node.label} descifra y vuelve a cifrar (puede leerlo).`, COLORS.amber, +t.toFixed(1));
+          text = `Tiene la llave: descifra el contenido y puede leerlo. Luego lo vuelve a cifrar con una nueva llave hacia ${next?.label ?? "el destino"}.`;
+          expColor = COLORS.amber;
+          readable = true;
+          reencrypts = !!next;
+          addLog(`${node.label} descifra el contenido y lo vuelve a cifrar (puede leerlo).`, COLORS.amber, +t.toFixed(1));
         } else if (!next) {
+          // Destino final: descifra y lee el contenido.
           title = "Aquí termina la llave segura";
           text = `${node.label} descifra el contenido final con su llave y lo lee.`;
-          expColor = COLORS.green; readable = true;
+          expColor = COLORS.green;
+          readable = true;
           addLog(`${node.label} recibe y descifra el contenido final.`, COLORS.green, +t.toFixed(1));
         }
+
         if (next) {
-          addLog(`Llave segura: ${node.label} -> ${next.label}`, LEG_COLORS[order % LEG_COLORS.length], +t.toFixed(1));
-          setActiveLeg(order);
-        } else setActiveLeg(null);
-        if (title && pauseModals) { setKeyExplain({ title, text, color: expColor, readable, reencrypts }); await pause(); }
-        return;
+          const legColor = LEG_COLORS[order % LEG_COLORS.length];
+          addLog(`Llave segura: ${node.label} -> ${next.label}`, legColor, +t.toFixed(1));
+          setActiveLeg(order); // resalta la línea de este tramo
+        } else {
+          setActiveLeg(null);
+        }
+
+        setKeyExplain({ title, text, color: expColor, readable, reencrypts });
+        await new Promise<void>((resolve) => {
+          resumeRef.current = resolve;
+        });
+        if (cancelled()) return;
       }
 
-      // E2EE: una sola llave; las nubes NO pueden leer.
+      // Narración E2EE: una sola llave; las nubes NO pueden leer.
       if (mode === "e2ee" && ENDPOINT_TYPES.has(node.type)) {
-        const devices = path.filter((n) => n.type === "laptop" || n.type === "smartphone");
-        const originDevId = devices[0]?.id;
-        const destDev = devices[devices.length - 1];
-        let title = "", text = "", expColor = COLORS.amber, readable = false;
+        const isCloud = node.type === "cloud-a" || node.type === "cloud-b";
+        let title = "";
+        let text = "";
+        let expColor = COLORS.amber;
+        let readable = false;
+
         if (node.id === originDevId) {
           title = "Cifrado de extremo a extremo";
           text = `${node.label} cifra el mensaje con una llave que solo comparte con ${destDev?.label ?? "el destino"}. Viaja cifrado todo el camino.`;
+          expColor = COLORS.amber;
+          readable = false;
           setActiveLeg(0);
         } else if (node.id === destDev?.id) {
           title = "Solo el destino lo lee";
           text = `${node.label} descifra el contenido con su llave compartida. Nadie en medio pudo leerlo.`;
-          expColor = COLORS.green; readable = true; setActiveLeg(null);
+          expColor = COLORS.green;
+          readable = true;
+          setActiveLeg(null);
           addLog(`${node.label} descifra el contenido final (destino).`, COLORS.green, +t.toFixed(1));
-        } else if (isServer) {
+        } else if (isCloud) {
           title = `${node.label} no puede leerlo`;
-          text = `Solo reenvía datos cifrados: no tiene la llave. A diferencia de HTTPS, aquí el servidor no ve el contenido.`;
-          expColor = COLORS.green; readable = false;
+          text = `Solo reenvía datos cifrados: no tiene la llave para abrirlos. A diferencia de HTTPS, aquí el servidor no ve el contenido.`;
+          expColor = COLORS.green;
+          readable = false;
           addLog(`${node.label} reenvía el contenido cifrado (no puede leerlo).`, COLORS.green, +t.toFixed(1));
         }
-        if (title && pauseModals) { setKeyExplain({ title, text, color: expColor, readable, reencrypts: false }); await pause(); }
-        return;
-      }
 
-      // VPN: túnel cifrado hasta la VPN; oculta tu IP; la VPN sí lee.
-      if (mode === "vpn") {
-        const vpnIdx = path.findIndex((n) => n.type === "vpn");
-        if (vpnIdx >= 0) {
-          const devices = path.filter((n) => n.type === "laptop" || n.type === "smartphone");
-          const originDevId = devices[0]?.id;
-          let vpnExitIdx = -1;
-          for (let k = vpnIdx + 1; k < path.length; k++) {
-            if (DEST_TYPES.has(path[k].type)) { vpnExitIdx = k; break; }
-          }
-          const insideTunnel = i < vpnIdx;
-          let title = "", text = "", expColor = COLORS.purple, readable = false;
-          if (node.id === originDevId) {
-            title = "Entras al túnel VPN";
-            text = `${node.label} cifra TODO el tráfico y lo envía por un túnel al servidor VPN. Tu ISP solo verá tráfico cifrado hacia la VPN, sin saber a dónde vas.`;
-            addLog("Túnel VPN: tráfico cifrado hacia el servidor VPN.", COLORS.purple, +t.toFixed(1));
-          } else if (node.type === "vpn") {
-            title = node.country ? `Servidor VPN (${node.country})` : "Servidor VPN";
-            text = `Descifra el túnel y reenvía tu tráfico a internet con SU dirección IP${node.country ? ` desde ${node.country}` : ""}, ocultando la tuya. Ojo: la VPN sí puede ver tu tráfico.`;
-            expColor = COLORS.amber; readable = true;
-            addLog(`Servidor VPN reenvía el tráfico con su propia IP${node.country ? ` (${node.country})` : ""}.`, COLORS.amber, +t.toFixed(1));
-          } else if (node.type === "isp" && insideTunnel) {
-            title = "Tu ISP no ve el destino";
-            text = `El ISP solo ve un túnel cifrado hacia la VPN: no sabe qué visitas ni puede leer el contenido.`;
-            expColor = COLORS.green;
-            addLog("ISP: solo ve tráfico cifrado hacia la VPN.", COLORS.green, +t.toFixed(1));
-          } else if (i === vpnExitIdx) {
-            title = "Sales con la IP de la VPN";
-            text = `El tráfico llega a ${node.label} con la IP de la VPN: tu identidad real queda oculta. Pero sin HTTPS, el contenido vuelve a viajar visible desde la VPN.`;
-            expColor = COLORS.green; readable = true;
-            addLog(`${node.label} te ve con la IP de la VPN (identidad oculta).`, COLORS.green, +t.toFixed(1));
-          }
-          if (title && pauseModals) { setKeyExplain({ title, text, color: expColor, readable, reencrypts: false }); await pause(); }
+        if (title) {
+          setKeyExplain({ title, text, color: expColor, readable, reencrypts: false });
+          await new Promise<void>((resolve) => {
+            resumeRef.current = resolve;
+          });
+          if (cancelled()) return;
         }
       }
 
-      // MITM: siempre pausa (momento clave).
+      // Punto didáctico: el atacante MitM intenta leer el paquete.
       if (node.type === "hacker") {
         addLog(
           encrypted
@@ -890,69 +775,21 @@ export default function App() {
           +t.toFixed(1)
         );
         setInterception({ readable: !encrypted });
-        await pause();
-      }
-    };
-
-    // Coloca el paquete en el origen.
-    move(origin);
-    setPacketVisible(true);
-    await wait(250);
-    if (cancelled()) return;
-
-    const narrated = new Set<string>([origin.id]);
-    let t = 0;
-    let prev: NetNode[] | null = null;
-    let deliveredCount = 0;
-
-    for (const path of paths) {
-      let startIdx = 1;
-      if (prev) {
-        // Retrocede hasta el último nodo común con el camino anterior.
-        let common = 0;
-        while (common < prev.length && common < path.length && prev[common].id === path[common].id) common++;
-        for (let k = prev.length - 2; k >= common - 1 && k >= 0; k--) {
-          setActiveEdge([prev[k + 1].id, prev[k].id]);
-          move(prev[k]);
-          await wait(HOP_MS);
-          if (cancelled()) return;
-        }
-        startIdx = common;
-      }
-
-      for (let i = startIdx; i < path.length; i++) {
-        const node = path[i];
-        const before = path[i - 1];
-        setKeyExplain(null);
-        setActiveEdge([before.id, node.id]);
-        move(node);
-        const hop = meta.latency / Math.max(1, path.length - 1) + Math.random() * 3;
-        t += hop;
-        const color = i % 2 === 0 ? COLORS.blue : COLORS.green;
-        addLog(`Paquete recibido en ${node.label} - Procesando...`, color, +t.toFixed(1));
-        await wait(HOP_MS);
+        await new Promise<void>((resolve) => {
+          resumeRef.current = resolve;
+        });
         if (cancelled()) return;
-
-        if (!narrated.has(node.id)) {
-          narrated.add(node.id);
-          await narrateNode(path, i, t);
-          if (cancelled()) return;
-        }
       }
-
-      deliveredCount += 1;
-      setDelivered({ done: deliveredCount, total: paths.length });
-      addLog(`Entrega exitosa en ${path[path.length - 1].label}.`, COLORS.green, +t.toFixed(1));
-      prev = path;
     }
 
-    setPacketsSent((p) => p + paths.length);
+    addLog("Entrega exitosa. Conexión cerrada.", COLORS.green, +t.toFixed(1));
+    setPacketsSent((p) => p + 1);
     setActiveEdge(null);
     setActiveLeg(null);
     setKeyExplain(null);
     setSimulating(false);
     setTimeout(() => setPacketVisible(false), 600);
-  }, [nodes, connections, simulating, meta, mode, encrypted, addLog, selectedTarget]);
+  }, [nodes, connections, simulating, meta, encrypted, addLog]);
 
   // ── Geometría del túnel VPN ───────────────────────────────────────────────────
   const vpnTunnel = useMemo(() => {
@@ -1069,60 +906,14 @@ export default function App() {
             <Shuffle size={18} />
             <span className="text-sm">Desordenar</span>
           </button>
-          <div className="relative">
-            <button
-              onClick={() => setScenarioOpen((o) => !o)}
-              className="flex items-center gap-2 rounded-lg px-3 py-2 font-semibold text-secondary transition-colors hover:bg-secondary/10"
-              title="Plantillas de escenario"
-            >
-              <Sparkles size={18} />
-              <span className="text-sm">Escenarios</span>
-              <ChevronDown size={14} />
-            </button>
-            {scenarioOpen && (
-              <>
-                <div className="fixed inset-0 z-40" onClick={() => setScenarioOpen(false)} />
-                <div className="absolute right-0 top-full z-50 mt-1 w-64 overflow-hidden rounded-xl border border-outline-variant bg-white shadow-2xl">
-                  <button
-                    onClick={() => {
-                      autoAssemble();
-                      setScenarioOpen(false);
-                    }}
-                    className="flex w-full flex-col items-start px-4 py-2.5 text-left hover:bg-surface-variant"
-                  >
-                    <span className="text-sm font-bold">Flujo simple</span>
-                    <span className="text-[11px] text-on-surface-variant">
-                      Persona a Persona por un solo camino.
-                    </span>
-                  </button>
-                  <button
-                    onClick={() => {
-                      buildMultiService();
-                      setScenarioOpen(false);
-                    }}
-                    className="flex w-full flex-col items-start border-t border-outline-variant px-4 py-2.5 text-left hover:bg-surface-variant"
-                  >
-                    <span className="text-sm font-bold">VPN a varios servicios</span>
-                    <span className="text-[11px] text-on-surface-variant">
-                      VPN en el extranjero hacia YouTube, Gmail y Portal Gob.
-                    </span>
-                  </button>
-                  <button
-                    onClick={() => {
-                      reset();
-                      setScenarioOpen(false);
-                    }}
-                    className="flex w-full flex-col items-start border-t border-outline-variant px-4 py-2.5 text-left hover:bg-surface-variant"
-                  >
-                    <span className="text-sm font-bold">Lienzo vacío</span>
-                    <span className="text-[11px] text-on-surface-variant">
-                      Modo interactivo: arma tú el flujo.
-                    </span>
-                  </button>
-                </div>
-              </>
-            )}
-          </div>
+          <button
+            onClick={autoAssemble}
+            className="flex items-center gap-2 rounded-lg px-3 py-2 font-semibold text-secondary transition-colors hover:bg-secondary/10"
+            title="Genera el flujo completo automáticamente"
+          >
+            <Sparkles size={18} />
+            <span className="text-sm">Auto-Armado</span>
+          </button>
           <button
             onClick={reset}
             className="flex items-center gap-2 rounded-full bg-outline-variant px-4 py-2 font-bold text-on-surface-variant transition hover:brightness-95"
@@ -1343,12 +1134,6 @@ export default function App() {
                   node={node}
                   keys={keyMap[node.id] ?? []}
                   isLinkTarget={linkHoverId === node.id}
-                  isSelected={selectedTarget === node.id}
-                  selectable={DEST_TYPES.has(node.type)}
-                  onSelect={() =>
-                    DEST_TYPES.has(node.type) &&
-                    setSelectedTarget((t) => (t === node.id ? null : node.id))
-                  }
                   onPointerDown={(e) => startNodeDrag(e, node)}
                   onStartLink={(e) => startLink(e, node)}
                   onRemove={() => removeNode(node.id)}
@@ -1404,24 +1189,6 @@ export default function App() {
                   <span className="font-bold text-secondary">no pueden leer</span> el contenido.
                 </p>
               )}
-            </div>
-          )}
-
-          {/* Leyenda VPN */}
-          {mode === "vpn" && (
-            <div className="absolute bottom-4 left-4 z-40 w-56 rounded-xl border border-outline-variant bg-white/95 p-3 shadow-xl backdrop-blur">
-              <div className="mb-2 flex items-center gap-1.5 text-[12px] font-bold text-on-surface">
-                <Lock size={14} className="text-primary" /> VPN: túnel cifrado
-              </div>
-              <div className="flex items-center gap-2 text-[11px]">
-                <KeyRound size={13} style={{ color: COLORS.purple }} />
-                <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: COLORS.purple }} />
-                <span className="text-on-surface-variant">Tu dispositivo ↔ VPN</span>
-              </div>
-              <p className="mt-2 border-t border-outline-variant pt-2 text-[10px] leading-snug text-on-surface-variant">
-                Oculta tu IP y tu ISP no ve el destino. Ojo: la{" "}
-                <span className="font-bold text-amber">VPN sí ve tu tráfico</span>.
-              </p>
             </div>
           )}
 
@@ -1682,9 +1449,6 @@ function NodeCard({
   node,
   keys,
   isLinkTarget,
-  isSelected,
-  selectable,
-  onSelect,
   onPointerDown,
   onStartLink,
   onRemove,
@@ -1692,9 +1456,6 @@ function NodeCard({
   node: NetNode;
   keys: string[];
   isLinkTarget: boolean;
-  isSelected: boolean;
-  selectable: boolean;
-  onSelect: () => void;
   onPointerDown: (e: React.PointerEvent) => void;
   onStartLink: (e: React.PointerEvent) => void;
   onRemove: () => void;
@@ -1710,9 +1471,8 @@ function NodeCard({
       transition={{ type: "spring", stiffness: 400, damping: 22 }}
       data-node-id={node.id}
       className="group absolute z-20 flex flex-col items-center gap-1.5"
-      style={{ left: node.x, top: node.y, cursor: selectable ? "pointer" : "grab" }}
+      style={{ left: node.x, top: node.y, cursor: "grab" }}
       onPointerDown={onPointerDown}
-      onClick={onSelect}
     >
       {/* Tooltip descriptivo (al pasar el mouse) */}
       <div className="pointer-events-none absolute bottom-full left-1/2 z-50 mb-2 w-48 -translate-x-1/2 scale-95 rounded-lg border border-white/10 bg-inverse-surface p-2.5 text-inverse-on-surface opacity-0 shadow-xl transition-all duration-150 group-hover:scale-100 group-hover:opacity-100">
@@ -1723,18 +1483,9 @@ function NodeCard({
         <div className="absolute left-1/2 top-full h-2 w-2 -translate-x-1/2 -translate-y-1 rotate-45 bg-inverse-surface" />
       </div>
 
-      {/* Badge de destino seleccionado */}
-      {isSelected && (
-        <div className="absolute -top-5 left-1/2 z-30 -translate-x-1/2 rounded-full bg-secondary px-2 py-0.5 text-[8px] font-bold uppercase tracking-wide text-white shadow">
-          Destino
-        </div>
-      )}
-
       <div
         className={`relative flex items-center justify-center rounded-xl border bg-white shadow-sm transition-all group-hover:shadow-lg ${
-          isSelected
-            ? "border-secondary ring-2 ring-secondary"
-            : isLinkTarget
+          isLinkTarget
             ? "border-primary ring-2 ring-primary"
             : "border-outline-variant group-hover:border-primary"
         }`}
@@ -1781,11 +1532,6 @@ function NodeCard({
       <span className="w-24 text-center text-[10px] font-bold uppercase tracking-wide text-on-surface-variant">
         {node.label}
       </span>
-      {node.country && (
-        <span className="-mt-1 rounded-full bg-primary-fixed px-1.5 py-0.5 text-[9px] font-semibold text-primary">
-          {node.country}
-        </span>
-      )}
     </motion.div>
   );
 }
