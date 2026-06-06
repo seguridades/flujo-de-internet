@@ -85,10 +85,19 @@ abren el manual de uso y la sección "Acerca de".
 TypeScript valida que cada JSON tenga exactamente las mismas claves que
 `es.json`, así no falta ninguna cadena.
 
+## Ayuda con traducciones
+
+Buscamos personas que nos ayuden a llevar el simulador a lenguas indígenas. Ahora
+mismo nos interesa especialmente el **náhuat** y el **quechua**. Si quieres
+colaborar con una traducción (o revisar las existentes), abre un issue en GitHub
+o escríbenos a `info` arroba `seguridades.org`. No necesitas saber programar:
+basta con traducir un archivo de texto (`src/locales/es.json`).
+
 ## Contacto
 
 ¿Comentarios o sugerencias? Escríbenos a `info` arroba `seguridades.org`.
 
 ## Estado
 
-Proyecto en desarrollo.
+Proyecto en desarrollo. Consulta el historial de cambios en
+[CHANGELOG.md](CHANGELOG.md).
