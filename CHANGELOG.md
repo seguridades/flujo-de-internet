@@ -6,6 +6,12 @@ usa [versionado semántico](https://semver.org/lang/es/).
 
 ## [No publicado]
 
+### Añadido
+
+- Favicon e icono para dispositivos (`public/favicon.png`).
+- Metadatos Open Graph y Twitter Card (título, descripción e imagen) para las
+  vistas previas al compartir el enlace, usando `public/og-image.png`.
+
 ### Cambiado
 
 - Las traducciones ahora viven en un archivo JSON por idioma dentro de
