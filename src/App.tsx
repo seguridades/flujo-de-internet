@@ -100,8 +100,13 @@ const COLORS = {
   purple: "#7c3aed",
 };
 
-// Colores para cada tramo cifrado (sesión TLS) en modo HTTPS.
-const LEG_COLORS = ["#0056d2", "#16a34a", "#f59e0b", "#7c3aed", "#db2777", "#0891b2"];
+// Colores para las llaves y los tramos cifrados. A propósito evitan el azul y
+// el verde (cables normales y tramo activo) y el naranja, para no confundirse
+// con ellos: usamos una paleta de magenta/cian/índigo, etc.
+const LEG_COLORS = ["#db2777", "#0891b2", "#4f46e5", "#c026d3", "#9333ea", "#e11d48"];
+
+// Color de la llave única compartida en E2EE (un solo tramo de extremo a extremo).
+const KEY_E2EE = "#db2777";
 
 // Extremos de cifrado en HTTPS: dispositivos y servidores (nubes). La
 // infraestructura intermedia (módem, ISP, torres) solo transporta bytes.
@@ -281,7 +286,7 @@ function findPath(nodes: NetNode[], connections: Connection[]): NetNode[] {
 function keysForNode(node: NetNode, mode: Mode): string[] {
   if (mode === "e2ee") {
     if (node.type === "laptop" || node.type === "smartphone" || node.type === "person2")
-      return [COLORS.amber];
+      return [KEY_E2EE];
   }
   if (mode === "vpn") {
     if (node.type === "laptop" || node.type === "vpn") return [COLORS.purple];
@@ -912,7 +917,7 @@ function AppInner() {
             nodeLbl,
             destDev ? nodeLabel(destDev.type, t) : t.sim.destFallback
           );
-          expColor = COLORS.amber;
+          expColor = KEY_E2EE;
           readable = false;
           setActiveLeg(0);
         } else if (node.id === destDev?.id) {
@@ -1000,8 +1005,8 @@ function AppInner() {
         (n) => n.type === "laptop" || n.type === "smartphone"
       );
       if (devices.length) {
-        map[devices[0].id] = [COLORS.amber];
-        map[devices[devices.length - 1].id] = [COLORS.amber];
+        map[devices[0].id] = [KEY_E2EE];
+        map[devices[devices.length - 1].id] = [KEY_E2EE];
       }
     } else if (mode === "vpn") {
       nodes.forEach((n) => {
@@ -1040,7 +1045,7 @@ function AppInner() {
           b,
           from: nodeLabel(a.type, t),
           to: nodeLabel(b.type, t),
-          color: COLORS.amber,
+          color: KEY_E2EE,
         });
       }
     }

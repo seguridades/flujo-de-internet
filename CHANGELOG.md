@@ -20,6 +20,9 @@ usa [versionado semántico](https://semver.org/lang/es/).
 
 ### Cambiado
 
+- Las llaves y los tramos cifrados (HTTPS y E2EE) usan una paleta nueva
+  (magenta / cian / índigo) en lugar de azul, verde y naranja, para no
+  confundirse con los cables normales ni con el tramo activo.
 - Las traducciones ahora viven en un archivo JSON por idioma dentro de
   `src/locales/` (`es.json`, `pt.json`). `src/i18n.tsx` quedó solo con la lógica
   (carga de idiomas, interpolación de variables y contexto). Las variables en las
