@@ -291,6 +291,91 @@ function keysForNode(node: NetNode, mode: Mode): string[] {
 
 const uid = () => Math.random().toString(36).slice(2, 8);
 
+// ── Inserción/eliminación quirúrgica del nodo VPN ────────────────────────────
+// Para flujos que NO son auto-armados puros (p. ej. auto-armado + un atacante
+// agregado a mano), no podemos recomponer todo con buildSequence sin perder esos
+// nodos. En su lugar insertamos o quitamos el nodo VPN sobre el grafo existente,
+// reconectando la cadena para que el túnel morado aparezca conservando lo demás.
+function insertVpnNode(
+  nodes: NetNode[],
+  connections: Connection[],
+  t: Dict
+): { nodes: NetNode[]; connections: Connection[] } | null {
+  if (nodes.some((n) => n.type === "vpn")) return null;
+  const path = findPath(nodes, connections);
+  if (path.length < 2) return null;
+
+  // Punto de inserción: tras el primer ISP de salida (como en buildSequence);
+  // si no hay ISP, tras la laptop; si no, el primer nodo del camino.
+  const target =
+    path.find((n) => n.type === "isp") ??
+    path.find((n) => n.type === "laptop") ??
+    path[0];
+  const ti = path.indexOf(target);
+  const nextNode = path[ti + 1] ?? null;
+
+  const tc = center(target);
+  let x: number;
+  let y: number;
+  if (nextNode) {
+    const nc = center(nextNode);
+    x = (tc.x + nc.x) / 2 - NODE / 2;
+    y = (tc.y + nc.y) / 2 - NODE / 2;
+  } else {
+    x = target.x + NODE + 80;
+    y = target.y;
+  }
+
+  const vpn: NetNode = {
+    id: `n-${uid()}`,
+    type: "vpn",
+    label: nodeLabel("vpn", t),
+    x: Math.max(0, x),
+    y: Math.max(0, y),
+    location: pickVpnLocation(),
+  };
+
+  // Reconecta: target -> vpn -> nextNode (o solo target -> vpn si era el final).
+  let conns = connections;
+  if (nextNode) {
+    conns = connections.filter(
+      (c) =>
+        !(
+          (c.from === target.id && c.to === nextNode.id) ||
+          (c.to === target.id && c.from === nextNode.id)
+        )
+    );
+    conns = [...conns, { from: target.id, to: vpn.id }, { from: vpn.id, to: nextNode.id }];
+  } else {
+    conns = [...connections, { from: target.id, to: vpn.id }];
+  }
+  return { nodes: [...nodes, vpn], connections: conns };
+}
+
+function removeVpnNode(
+  nodes: NetNode[],
+  connections: Connection[]
+): { nodes: NetNode[]; connections: Connection[] } | null {
+  const vpn = nodes.find((n) => n.type === "vpn");
+  if (!vpn) return null;
+
+  // Vecinos del nodo VPN, para volver a unir la cadena tras quitarlo.
+  const neighbors = connections
+    .filter((c) => c.from === vpn.id || c.to === vpn.id)
+    .map((c) => (c.from === vpn.id ? c.to : c.from));
+
+  const newNodes = nodes.filter((n) => n.id !== vpn.id);
+  let conns = connections.filter((c) => c.from !== vpn.id && c.to !== vpn.id);
+  if (neighbors.length === 2) {
+    const [a, b] = neighbors;
+    const exists = conns.some(
+      (c) => (c.from === a && c.to === b) || (c.from === b && c.to === a)
+    );
+    if (!exists) conns = [...conns, { from: a, to: b }];
+  }
+  return { nodes: newNodes, connections: conns };
+}
+
 // ════════════════════════════════════════════════════════════════════════════
 //  COMPONENTE PRINCIPAL
 // ════════════════════════════════════════════════════════════════════════════
@@ -548,26 +633,34 @@ function AppInner() {
   }, [mode, simulating, getRegion, t]);
 
   // ── Cambio de modo ───────────────────────────────────────────────────────────
-  // El nodo VPN forma parte de la topología SOLO en modo VPN. Si el lienzo tiene
-  // un flujo auto-armado, lo recompone al entrar o salir de VPN para que el nodo
-  // VPN aparezca o desaparezca. Los flujos cableados a mano se respetan.
+  // El nodo VPN forma parte de la topología SOLO en modo VPN: aparece al entrar y
+  // desaparece al salir. En un flujo auto-armado puro recomponemos todo (reflujo
+  // limpio); en flujos mixtos (auto-armado + un atacante a mano, o cableados a
+  // mano) insertamos/quitamos el nodo VPN sin perder lo demás.
   const changeMode = useCallback(
     (next: Mode) => {
       setMode(next);
       if (simulating) return;
-      const isAuto = nodes.length > 0 && nodes.every((n) => n.id.startsWith("auto-"));
       const hasVpn = nodes.some((n) => n.type === "vpn");
-      if (isAuto && (next === "vpn") !== hasVpn) {
-        const { nodes: ns, connections: cs } = buildSequence(next, getRegion(), t);
-        setNodes(ns);
-        setConnections(cs);
-        setLogs([]);
-        setActiveEdge(null);
-        setPacketVisible(false);
-        setDelivered({ done: 0, total: 0 });
-      }
+      const entering = next === "vpn";
+      if (entering === hasVpn) return; // el nodo VPN ya está en el estado correcto
+
+      const isAuto = nodes.length > 0 && nodes.every((n) => n.id.startsWith("auto-"));
+      const result = isAuto
+        ? buildSequence(next, getRegion(), t)
+        : entering
+        ? insertVpnNode(nodes, connections, t)
+        : removeVpnNode(nodes, connections);
+      if (!result) return;
+
+      setNodes(result.nodes);
+      setConnections(result.connections);
+      setLogs([]);
+      setActiveEdge(null);
+      setPacketVisible(false);
+      setDelivered({ done: 0, total: 0 });
     },
-    [nodes, simulating, getRegion, t]
+    [nodes, connections, simulating, getRegion, t]
   );
 
   // ── Modo Taller: reparte los nodos del flujo inicial DESORDENADOS ────────────

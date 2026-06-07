@@ -12,6 +12,12 @@ usa [versionado semántico](https://semver.org/lang/es/).
 - Metadatos Open Graph y Twitter Card (título, descripción e imagen) para las
   vistas previas al compartir el enlace, usando `public/og-image.png`.
 
+### Corregido
+
+- El túnel VPN morado no aparecía al cambiar a modo VPN cuando el flujo tenía
+  nodos agregados a mano (por ejemplo un Atacante MitM). Ahora el nodo VPN se
+  inserta o se quita sobre el grafo existente sin perder los demás nodos.
+
 ### Cambiado
 
 - Las traducciones ahora viven en un archivo JSON por idioma dentro de
